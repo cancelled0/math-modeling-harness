@@ -172,6 +172,78 @@
       "human_pause": false
     },
     {
+      "id": "discussion-only",
+      "request": "先别写代码，和我讨论并直接评价这个建模思路",
+      "state": "没有正式执行意图",
+      "expected_primary": "modeling-thought-partner",
+      "expected_supporting": [],
+      "human_pause": false
+    },
+    {
+      "id": "academic-scan-before-discussion",
+      "request": "完整赛题已解析，先查方向相关论文和官方资料再讨论方法",
+      "state": "submission，evidence brief 缺失",
+      "expected_primary": "modeling-evidence-collector",
+      "expected_supporting": ["paper-lookup", "related-paper-analyzer"],
+      "human_pause": false
+    },
+    {
+      "id": "academic-evidence-scarce",
+      "request": "同方向论文太少，按优先级寻找邻近结构资料，仍不足才看相似赛题",
+      "state": "机理与验证证据未覆盖",
+      "expected_primary": "modeling-evidence-collector",
+      "expected_supporting": ["paper-lookup"],
+      "human_pause": false
+    },
+    {
+      "id": "start-git-algorithm-experiment",
+      "request": "已经确认尝试新算法，请保存当前版本并创建实验分支",
+      "state": "G2.5 通过，main 为稳定版本",
+      "expected_primary": "git-experiment-manager",
+      "expected_supporting": ["model-code-analyzer"],
+      "human_pause": false
+    },
+    {
+      "id": "compare-git-experiments",
+      "request": "比较两个 Git 提交对应算法的效果",
+      "state": "两个 run summary 有数据、划分、特征和指标哈希",
+      "expected_primary": "git-experiment-manager",
+      "expected_supporting": ["result-report-generator"],
+      "human_pause": false
+    },
+    {
+      "id": "incomparable-git-experiments",
+      "request": "两个算法的数据划分哈希不同，判断哪个更好",
+      "state": "comparison contract 不一致",
+      "expected_primary": "git-experiment-manager",
+      "expected_supporting": ["python-model-code-generator"],
+      "human_pause": false
+    },
+    {
+      "id": "reject-regressed-algorithm",
+      "request": "新算法效果变差，保留记录并返回原稳定版本",
+      "state": "人工 result_verdict 已拒绝实验分支",
+      "expected_primary": "git-experiment-manager",
+      "expected_supporting": ["workflow-orchestrator"],
+      "human_pause": false
+    },
+    {
+      "id": "chinese-latex-paper",
+      "request": "将冻结结果组装为中文 CUMCM LaTeX 并编译检查 PDF",
+      "state": "G4、tex 分节和引用齐全",
+      "expected_primary": "latex-paper-zh",
+      "expected_supporting": ["reference-manager", "consistency-auditor"],
+      "human_pause": false
+    },
+    {
+      "id": "latex-toolchain-missing",
+      "request": "中文 TeX 已完成但系统没有 xelatex，请给出真实能力状态",
+      "state": "LaTeX preflight unavailable",
+      "expected_primary": "latex-paper-zh",
+      "expected_supporting": ["workflow-orchestrator"],
+      "human_pause": false
+    },
+    {
       "id": "final-audit",
       "request": "提交前进行三层最终审计",
       "state": "所有 Qx 已到 G5，尚无最终审计",
@@ -208,4 +280,3 @@
     }
   ]
 }
-

@@ -1,90 +1,82 @@
 # 数学建模竞赛完整流程
 
-本流程定义阶段顺序、证据门和人工判断点。`workflow-orchestrator` 是阶段状态的唯一调度者；专业 Skill 负责生成证据。
+`modeling-thought-partner` 提供旁路讨论；`workflow-orchestrator` 是正式阶段状态的唯一调度者；专业 Skills 生成证据；Git 保存算法实验谱系。
 
-## S0 会话与赛题范围
+## D0 自由思路讨论
 
-- 读取根目录 `AGENTS.md` 和 `planning/session_config.json`。
-- 完整 CUMCM 赛题使用 `submission`；局部学习、探索或单次实验使用 `lean`。
-- 只初始化当前请求需要的目录。识别 Q1、Q2……，不得把不同子问的阶段混在一起。
+当用户只想讨论或评价方案时，说明正在进行模型构建与思路讨论，适时追问并直接评价。不得生成 manifest、方法决定、代码或 Git 分支。用户明确正式开始或采用方案后进入 S0。
 
-## S1 理解、抽象与 G1
+## S0 会话、环境与 Git
 
-1. `problem-parser` 提取目标、对象、数据、约束、输出、子问依赖、变量与成功标准。
-2. `problem-classifier` 标记每问的主要/次要任务类型，不选算法。
-3. 必要时由 `symbol-table-builder` 和 `model-assumptions-builder` 建立全局符号、单位与假设。
-4. 只有重大题意歧义才调用 `decision-prompt-builder` 暂停；答案由 `modeler-decision-logger` 记录。
+- 完整 CUMCM 使用 `submission`，局部实验使用 `lean`。
+- `workflow.py init` 只创建最小 planning 状态和每问 manifest。
+- 检查 Git、Python/MATLAB、LaTeX、字体和必要包；不可用能力必须显式报告。
+- `main` 保存已接受状态；原始大数据、密钥、缓存和大型模型不纳入 Git。
 
-G1 需要：解析、分类、数据清单、成功标准与必要的人类题意确认。
+## S1 题意理解与 G1
 
-## S2 数据、外部证据与特征
+1. `problem-parser` 建立模型中立的问题契约。
+2. `problem-classifier` 按输出与约束识别每问的主/次任务类型。
+3. 必要时使用 `symbol-table-builder`、`model-assumptions-builder`。
+4. 只有重大题意歧义才暂停，并由 JSONL 记录人工决定。
 
-- 有本地附件：`data-auditor-cleaner` 盘点、清洗并生成 `data_profile.json`。
-- 需要外部数据、标准、统计或文献：`modeling-evidence-collector` 生成 `source_registry.json`；论文发现交给 `paper-lookup`，原文分析交给 `related-paper-analyzer`。
-- 实验尚未采集：`experimental-design`；样本量问题交给 `statistical-power`。
-- 需要派生变量、指标体系、滞后/空间/网络特征或变量约简：`feature-engineering`。
-- 只需要受限的本地探索：`exploratory-data-analysis`，其结论仍须进入数据概况或特征审计。
+## S2 学术证据、数据与特征
 
-外部数据下载后必须回到 `data-auditor-cleaner`；特征构造必须建立在划分契约上。原始数据始终只读。
+submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：同方向学术/官方资料 → 邻近结构学术资料 → 仍不足时相似赛题启发。
 
-## S3 方法筛选、风险探针与 G2/G2.5
+- `modeling-evidence-collector` 建立需求、来源注册表和每问 evidence brief。
+- `paper-lookup` 负责可复现检索，`related-paper-analyzer` 读取原文并提取适用性与局限。
+- 本地或外部数据由 `data-auditor-cleaner` 审计；原始数据只读。
+- 派生特征、指标体系、变量选择和参数约简由 `feature-engineering` 完成，所有学习型转换只在训练折/窗口拟合。
 
-1. `method-selector` 根据输出、约束、数据风险和评估预算给出：一个主候选、一个真正完成任务的可用基线、至多一个带触发条件的备选。
-2. 参考 `method-scenarios.md` 选择方法族。专业库 Skill 可为风险探针提供有界技术检查，但不能在选择前铺开实现多个算法。
-3. 主方法与基线均需通过适用的可执行性、假设、退化、敏感性和规模风险探针。
-4. G2 通过后，在人工判断点使用选择卡；只有 JSONL 中出现人工 `DECIDED` 记录才通过 G2.5。
-5. 完整的专业算法设计与代码计划在 G2.5 后进行； dormant fallback 不实现。
+证据充分性看机理、适用性、验证/基线、数据/参数四类覆盖，不追求固定论文数量。
 
-## S4 实现、实验与 G3
+## D1 有证据支撑的思路讨论
 
-1. `model-code-analyzer` 读取方法决定、数据契约、适用的特征规格和基线，形成语言无关的实验契约。
-2. 自动语言默认为 Python；用户指定 MATLAB/北太天元或主工程为 `.m` 时走 MATLAB。
-3. 语言生成器实现并实际运行主方法与基线，保存同数据、同划分、同单位、同指标的比较证据。
-4. `code-reviewer` 路由到语言审查器。审查必须覆盖语法、输入契约、方法一致性、可复现性、输出契约，以及适用的泄漏、预处理范围、特征选择、退化或可行性检查。
+用户需要时进入 `modeling-thought-partner`。可以读取题意、数据概况和 evidence brief，但仍不更新状态。讨论结束后由 `method-selector` 正式化，不把对话中的探索性赞同当作决定。
 
-G3 只在主方法和基线执行成功、run summary 完整且必需检查通过后通过。
+## S3 方法筛选与 G2/G2.5
 
-## S5 结果诊断、改进与 G4
+1. `method-selector` 给出一个主候选、一个可完成真实任务的基线，以及至多一个带触发条件的备选。
+2. 主方法和基线执行有界风险探针。
+3. G2 通过后由用户确认最终方法；只有人类 `DECIDED` 记录才通过 G2.5。
+4. dormant fallback 不提前实现。
 
-1. `result-report-generator` 首先把问题归因到数据、特征、方法、参数、实现或指标定义。
-2. 只修复被证据支持的层：
-   - 数据问题 → `data-auditor-cleaner`；
-   - 特征/变量问题 → `feature-engineering`；
-   - 方法假设问题 → `method-selector`，必要时触发已记录备选；
-   - 参数/不稳定 → 专业方法 Skill 与 `robustness-checker`；
-   - 实现问题 → 语言生成器/审查器；
-   - 指标问题 → 回到成功标准和方法卡确认。
-3. `robustness-checker` 执行风险导向的消融、敏感性、扰动、重采样、误差和不确定性分析。
-4. 有意义的一轮结果后，在人工判断点选择接受、调整或启用备选。不得仅因某指标下降就任意换算法。
+## S4 Git 实验、实现与 G3
 
-这里先冻结“最终实验轮与结果判断”。`submission` 模式随后生成最终方法解释、结果分析、鲁棒性报告与写作包；经 package sign-off 后由 `solution-package-builder` 生成不可手改的 `frozen_numbers.json`，完成数值声明冻结。
+1. `git-experiment-manager` 从稳定 commit 创建 `exp/<contest>/<Qx>/<algorithm>`。
+2. `model-code-analyzer` 写语言中立实验契约。
+3. Python/MATLAB 生成器实现并实际运行主方法和基线。
+4. `run_summary.json` 记录 commit、父 commit、数据/划分/特征/指标定义哈希、随机种子和环境。
+5. `code-reviewer` 检查语法、契约、泄漏、预处理范围、特征一致性、可复现性、退化和可行性。
 
-## S6 论文、图表与 G5
+## S5 结果诊断、比较和 G4
 
-1. `final-method-explainer` 建立权威方法解释。
-2. `result-report-generator` 生成最终结果分析。
-3. `figure-table-planner` 规划最小必要图表；`math-figure-generator` 生成并渲染验证，`scientific-visualization` 提供专项绘图支持。
-4. `solution-package-builder` 完成写作包、声明范围确认和数值冻结。
-5. `paper-section-writer` 只从写作包、冻结数字、人工决定和验证图表写作。
-6. `reference-manager` 核验引用，`paper-polisher` 润色。
-7. 中文 CUMCM 默认走 Word/Markdown 文档能力并渲染 PDF 核对；仅明确英文 LaTeX 才用 `latex-paper-en`。
+1. `result-report-generator` 先归因为数据、特征、方法、参数、实现或指标问题。
+2. 只修复有证据的层；算法变化进入新的或既有实验分支。
+3. `compare_experiments.py` 只在同数据、划分、特征规格、指标定义和问题 ID 下判断优劣。
+4. 用户选择接受、调整或启用备选：接受则合并；拒绝则保留分支和失败证据并返回稳定分支。
+5. `robustness-checker` 执行消融、敏感性、扰动、重采样、误差与不确定性分析。
+6. 人工确认声明范围后由 `solution-package-builder` 生成写作包和 `frozen_numbers.json`。
 
-G5 要求写作来源、冻结数字、人工确认的解释/声明范围和验证图表一致。
+## S6 论文、中文 LaTeX 与 G5
+
+1. 最终方法解释、结果分析、图表计划和验证图件齐全。
+2. `paper-section-writer` 只从写作包、冻结数字、人工决定和验证图表写作。
+3. `reference-manager` 核验引用，`paper-polisher` 润色。
+4. 中文 CUMCM 使用 `latex-paper-zh` 组装 XeLaTeX 论文并生成构建/交付报告；工具链缺失时状态为 `unavailable`，可按配置使用 Word 备选。
+5. 英文 LaTeX 使用 `latex-paper-en`。
 
 ## S7 三层审计与 G6
 
-按顺序执行：
+依次执行 `consistency-auditor`、`completeness-auditor`、`quality-assurance-auditor`。最终 PDF 还需页面渲染检查。全部通过后创建 release commit/tag 并导出交付物。
 
-1. `consistency-auditor`：数值、符号、参数、决定、文件和论文声明一致性；
-2. `completeness-auditor`：submission 语义证据完整且未过期；
-3. `quality-assurance-auditor`：工作流、证据、方法、论文与呈现的最终质量。
+## 失效与恢复
 
-三个审计各自通过才允许最终组装。任何冻结证据的实质修改都必须记录解冻、重跑、重新冻结并做范围一致性复核。
+- `NONE`：排版或注释，不触发模型重跑。
+- `LOCAL`：冻结前局部探索，只复查相关实验。
+- `CANONICAL`：数据口径、单位、方程、参数或指标改变，标记受影响 Qx 下游 stale。
+- `FROZEN`：记录解冻，重跑、重新冻结并做范围一致性审计。
 
-## 状态改变原则
-
-- `NONE`：排版、注释、草稿，不触发模型审计。
-- `LOCAL`：冻结前的探索或方法卡局部更新，只复查局部。
-- `CANONICAL`：单位、符号、方程、参数、官方值或图路径改变，做受影响 Qx 的一致性检查。
-- `FROZEN`：影响冻结数值或论文声明，必须解冻并重跑相关链路。
+旧产物不删除；新产物和人工决定必须晚于 stale 时间。算法差方案通过保留分支返回稳定状态，已合并方案用 `git revert`，不破坏历史。
 

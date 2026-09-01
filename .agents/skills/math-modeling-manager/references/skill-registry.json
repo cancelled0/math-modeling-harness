@@ -117,11 +117,27 @@
       "next_skills": ["feature-engineering", "model-code-analyzer"]
     },
     {
+      "name": "git-experiment-manager",
+      "category": "implementation",
+      "stage": "G2.5-G4",
+      "activation": "用户确认实现或改变算法，需要版本化实验、比较、接受或恢复",
+      "outputs": ["planning/experiments/Qx/active_experiment.json", "planning/experiment_registry.jsonl"],
+      "next_skills": ["model-code-analyzer", "result-report-generator", "workflow-orchestrator"]
+    },
+    {
       "name": "latex-paper-en",
       "category": "communication",
       "stage": "G5",
       "activation": "用户明确要求英文 LaTeX 或已有英文 tex 稿",
       "outputs": [],
+      "next_skills": ["consistency-auditor"]
+    },
+    {
+      "name": "latex-paper-zh",
+      "category": "communication",
+      "stage": "G5-G6",
+      "activation": "冻结后的中文 CUMCM LaTeX 组装、编译与 PDF 交付检查",
+      "outputs": ["paper/main.tex", "paper/main.pdf", "paper/latex_build_report.json", "paper/latex_delivery_check.json"],
       "next_skills": ["consistency-auditor"]
     },
     {
@@ -138,7 +154,7 @@
       "stage": "G0-G6",
       "activation": "完整赛题、模糊请求、跨阶段续作或故障恢复",
       "outputs": [],
-      "next_skills": ["workflow-orchestrator"]
+      "next_skills": ["workflow-orchestrator", "modeling-thought-partner"]
     },
     {
       "name": "matlab-code-reviewer",
@@ -193,8 +209,16 @@
       "category": "data-evidence",
       "stage": "G1-G2",
       "activation": "采集外部数据、标准、公报、论文和行业报告",
-      "outputs": ["workspace/data/source_registry.json"],
-      "next_skills": ["paper-lookup", "related-paper-analyzer", "data-auditor-cleaner"]
+      "outputs": ["workspace/data/source_registry.json", "workspace/evidence/Qx/evidence_brief.json"],
+      "next_skills": ["paper-lookup", "related-paper-analyzer", "data-auditor-cleaner", "modeling-thought-partner"]
+    },
+    {
+      "name": "modeling-thought-partner",
+      "category": "framing-governance",
+      "stage": "D0-D1",
+      "activation": "用户只讨论、质疑或评价建模思路且暂不执行",
+      "outputs": [],
+      "next_skills": ["math-modeling-manager"]
     },
     {
       "name": "networkx",
@@ -226,7 +250,7 @@
       "stage": "G5",
       "activation": "依据写作包、冻结数字和人工解释撰写论文分节",
       "outputs": ["paper/sections/"],
-      "next_skills": ["reference-manager", "paper-polisher"]
+      "next_skills": ["reference-manager", "paper-polisher", "latex-paper-zh", "latex-paper-en"]
     },
     {
       "name": "problem-classifier",
@@ -306,7 +330,7 @@
       "stage": "G3-G4",
       "activation": "有意义的实验、异常或最终结果需要比较与归因",
       "outputs": ["results/Qx/experiments/roundN/qx_decision_report.md", "results/Qx/reports/qx_final_result_analysis.md"],
-      "next_skills": ["data-auditor-cleaner", "feature-engineering", "method-selector", "robustness-checker"]
+      "next_skills": ["data-auditor-cleaner", "feature-engineering", "method-selector", "robustness-checker", "git-experiment-manager"]
     },
     {
       "name": "robustness-checker",
@@ -408,9 +432,9 @@
       "name": "workflow-orchestrator",
       "category": "orchestration",
       "stage": "G0-G6",
-      "activation": "读取工作区、评估阶段门、维护 manifest 与一个下一动作",
-      "outputs": ["planning/manifests/Qx.json"],
-      "next_skills": ["problem-parser", "data-auditor-cleaner", "method-selector", "model-code-analyzer", "result-report-generator", "robustness-checker", "solution-package-builder", "quality-assurance-auditor"]
+      "activation": "运行文件型状态机，维护每问 manifest、暂停恢复、失效与一个下一动作",
+      "outputs": ["planning/workflow_run.json", "planning/manifests/Qx.json", "planning/artifacts.json"],
+      "next_skills": ["problem-parser", "modeling-evidence-collector", "data-auditor-cleaner", "method-selector", "git-experiment-manager", "model-code-analyzer", "result-report-generator", "robustness-checker", "solution-package-builder", "latex-paper-zh", "quality-assurance-auditor"]
     }
   ]
 }

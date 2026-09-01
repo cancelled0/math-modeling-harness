@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "profile": "submission",
+  "defaults": {
+    "contest_profile": "CUMCM",
+    "paper_language": "zh-CN",
+    "paper_format": "latex",
+    "implementation_language": "auto",
+    "requires_academic_evidence_scan": true
+  },
+  "human_checkpoints": [
+    {"reason": "material_framing_ambiguity", "policy": "never_auto_approve", "trigger": "conditional"},
+    {"reason": "final_method_choice", "policy": "never_auto_approve", "trigger": "method-choice"},
+    {"reason": "result_accept_adjust_or_fallback", "policy": "never_auto_approve", "trigger": "result-verdict"},
+    {"reason": "number_freeze_and_claim_scope", "policy": "never_auto_approve", "trigger": "freeze"}
+  ],
+  "steps": [
+    {
+      "id": "problem-parse",
+      "skill": "problem-parser",
+      "outputs": ["planning/parse/problem_parse.json"],
+      "artifact_key": "problem_parse",
+      "checks": ["artifact_check"],
+      "gate_after": "G0"
+    },
+    {
+      "id": "problem-classify",
+      "skill": "problem-classifier",
+      "outputs": ["planning/classification/problem_classification.json"],
+      "artifact_key": "problem_classification",
+      "checks": ["artifact_check"],
+      "gate_after": "G0"
+    },
+    {
+      "id": "academic-evidence-scan",
+      "skill": "modeling-evidence-collector",
+      "outputs": ["workspace/evidence/{question}/evidence_brief.json"],
+      "artifact_key": "evidence_brief",
+      "checks": ["artifact_check", "reference_check"],
+      "gate_after": "G0"
+    },
+    {
+      "id": "data-audit",
+      "skill": "data-auditor-cleaner",
+      "outputs": ["workspace/data/data_profile.json"],
+      "artifact_key": "data_profile",
+      "checks": ["artifact_check", "data_ingest_check"],
+      "gate_after": "G1"
+    },
+    {
+      "id": "method-screen",
+      "skill": "method-selector",
+      "outputs": ["methods/{question}/{question_lower}_method_card.md", "methods/{question}/probes/risk_probe_summary.json"],
+      "artifact_key": "method_card",
+      "checks": ["artifact_check", "baseline_check"],
+      "gate_after": "G2"
+    },
+    {
+      "id": "method-choice",
+      "skill": "decision-prompt-builder",
+      "outputs": ["methods/{question}/{question_lower}_decisions.jsonl"],
+      "artifact_key": "decision_ledger",
+      "checks": ["human_decision_check"],
+      "gate_after": "G2.5",
+      "checkpoint": {"reason": "final_method_choice", "policy": "never_auto_approve", "decision_type": "method_choice"}
+    },
+    {
+      "id": "git-experiment",
+      "skill": "git-experiment-manager",
+      "outputs": ["planning/experiments/{question}/active_experiment.json"],
+      "artifact_key": "experiment_context",
+      "checks": ["git_context_check"],
+      "gate_after": "G2.5"
+    },
+    {
+      "id": "code-plan",
+      "skill": "model-code-analyzer",
+      "outputs": ["code/{question}/{question_lower}_code_plan.md"],
+      "artifact_key": "code_plan",
+      "checks": ["artifact_check"],
+      "gate_after": "G2.5",
+      "language_variants": {
+        "matlab": {"outputs": ["code/matlab/{question}/{question_lower}_code_plan.md"]}
+      }
+    },
+    {
+      "id": "model-run",
+      "skill": "python-model-code-generator",
+      "outputs": ["results/{question}/experiments/round1/run_summary.json"],
+      "artifact_key": "latest_run",
+      "checks": ["artifact_check", "baseline_check", "modeling_coverage_check"],
+      "gate_after": "G2.5",
+      "language_variants": {
+        "matlab": {"skill": "matlab-model-code-generator"}
+      }
+    },
+    {
+      "id": "code-review",
+      "skill": "code-reviewer",
+      "outputs": ["code/{question}/reviews/{question_lower}_python_review.json"],
+      "artifact_key": "code_review",
+      "checks": ["artifact_check", "leakage_check"],
+      "gate_after": "G3",
+      "language_variants": {
+        "matlab": {"outputs": ["code/matlab/{question}/reviews/{question_lower}_matlab_review.json"]}
+      }
+    },
+    {
+      "id": "result-report",
+      "skill": "result-report-generator",
+      "outputs": ["results/{question}/reports/{question_lower}_final_result_analysis.md"],
+      "artifact_key": "result_analysis",
+      "checks": ["artifact_check", "baseline_check"],
+      "gate_after": "G3"
+    },
+    {
+      "id": "result-verdict",
+      "skill": "decision-prompt-builder",
+      "outputs": ["methods/{question}/{question_lower}_decisions.jsonl"],
+      "artifact_key": "decision_ledger",
+      "checks": ["human_decision_check"],
+      "gate_after": "G3",
+      "checkpoint": {"reason": "result_accept_adjust_or_fallback", "policy": "never_auto_approve", "decision_type": "result_verdict"}
+    },
+    {
+      "id": "robustness",
+      "skill": "robustness-checker",
+      "outputs": ["robustness/{question}/{question_lower}_robustness_summary.json"],
+      "artifact_key": "robustness_summary",
+      "checks": ["artifact_check"],
+      "gate_after": "G3"
+    },
+    {
+      "id": "freeze",
+      "skill": "solution-package-builder",
+      "outputs": ["results/{question}/reports/{question_lower}_solution_package_for_writer.md", "results/{question}/reports/frozen_numbers.json"],
+      "artifact_key": "frozen_numbers",
+      "checks": ["artifact_check", "frozen_number_check"],
+      "gate_after": "G4",
+      "checkpoint": {
+        "reason": "number_freeze_and_claim_scope",
+        "policy": "never_auto_approve",
+        "decision_type": "package_signoff",
+        "decision_file": "methods/{question}/{question_lower}_decisions.jsonl"
+      }
+    },
+    {
+      "id": "paper-section",
+      "skill": "paper-section-writer",
+      "outputs": ["paper/sections/{question_lower}.tex"],
+      "artifact_key": "paper_section",
+      "checks": ["artifact_check", "claim_code_check"],
+      "gate_after": "G4",
+      "paper_format_variants": {
+        "word": {"outputs": ["paper/sections/{question_lower}.md"]},
+        "markdown": {"outputs": ["paper/sections/{question_lower}.md"]}
+      }
+    },
+    {
+      "id": "latex-build",
+      "skill": "latex-paper-zh",
+      "outputs": ["paper/main.tex", "paper/main.pdf", "paper/latex_build_report.json", "paper/latex_delivery_check.json"],
+      "artifact_key": "paper_pdf",
+      "checks": ["artifact_check", "reference_check", "delivery_check"],
+      "gate_after": "G5",
+      "paper_formats": ["latex"]
+    },
+    {
+      "id": "word-build",
+      "skill": "paper-section-writer",
+      "outputs": ["paper/main.docx", "paper/main.pdf"],
+      "artifact_key": "paper_pdf",
+      "checks": ["artifact_check", "delivery_check"],
+      "gate_after": "G5",
+      "paper_formats": ["word"],
+      "external_capabilities": ["documents", "pdf-render-verification"]
+    },
+    {
+      "id": "markdown-build",
+      "skill": "paper-section-writer",
+      "outputs": ["paper/main.md", "paper/main.pdf"],
+      "artifact_key": "paper_pdf",
+      "checks": ["artifact_check", "delivery_check"],
+      "gate_after": "G5",
+      "paper_formats": ["markdown"],
+      "external_capabilities": ["documents", "pdf-render-verification"]
+    },
+    {
+      "id": "consistency-audit",
+      "skill": "consistency-auditor",
+      "outputs": ["paper/audits/cross_media_consistency_audit.md"],
+      "artifact_key": "consistency_audit",
+      "checks": ["artifact_check"],
+      "gate_after": "G5"
+    },
+    {
+      "id": "completeness-audit",
+      "skill": "completeness-auditor",
+      "outputs": ["paper/audits/completeness_audit.md"],
+      "artifact_key": "completeness_audit",
+      "checks": ["artifact_check"],
+      "gate_after": "G5"
+    },
+    {
+      "id": "quality-audit",
+      "skill": "quality-assurance-auditor",
+      "outputs": ["paper/qa_report.md"],
+      "artifact_key": "quality_audit",
+      "checks": ["artifact_check", "delivery_check"],
+      "gate_after": "G6"
+    }
+  ]
+}

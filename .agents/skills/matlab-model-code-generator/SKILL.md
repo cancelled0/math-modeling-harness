@@ -22,10 +22,12 @@ Legacy artifacts may be read during migration but do not override the human deci
    - Fit learned preprocessing, feature selection, and tuning only on the training partition or chronological training window.
    - Enforce the retained variables/parameters in the approved feature spec and report mismatches.
 5. Save tables, metrics, useful figures, and `run_summary.json` under `results/Qx/experiments/roundN/`.
+   Include Git experiment ID, branch/parent context, data/split/feature/metric hashes and a structured primary metric.
 6. Evaluate output-degeneracy and fallback-trigger metrics required by the plan.
 7. Use `diary` or another full log only for a failure or reproducibility warning.
 8. Run in the available compatible runtime. If unavailable, report the unexecuted state explicitly.
 9. Hand off to `code-reviewer`.
+10. Bind the reviewed code and evidence to Git through `git-experiment-manager`; do not stage unrelated files.
 
 # Script Layout
 
@@ -68,4 +70,5 @@ Follow the `model-code-analyzer` contract, including approved decision ID, roles
 - Compatibility, seed, inputs, warnings, and errors are recorded.
 - Required concentration/degeneracy checks are saved.
 - The run summary names the data profile and applicable feature spec, and feature outputs match that contract.
+- Git and comparison-contract fields are complete enough for `compare_experiments.py`.
 - Next handoff is `code-reviewer`.

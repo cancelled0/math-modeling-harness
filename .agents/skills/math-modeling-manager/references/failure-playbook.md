@@ -19,6 +19,11 @@
 | 论文数字与代码不一致 | 冻结值、来源定位、图表缓存 | 冻结证据 | `consistency-auditor` | 解冻→重跑→重新冻结 |
 | 论文没有证据支撑 | 写作包、鲁棒性、人工声明范围、引用 | 写作/证据 | 对应生产 Skill、`modeling-evidence-collector`、`reference-manager` | 补证据或降级声明 |
 | 文献目录为空 | 是否授权外部检索、检索问题是否明确 | 证据 | `paper-lookup` 经 `modeling-evidence-collector` 规划 | 原文到位后 `related-paper-analyzer` |
+| 同方向学术资料不足 | 机理、适用性、验证/基线、数据/参数四类覆盖 | 证据 | `modeling-evidence-collector` 先扩展到邻近结构学术资料；仍不足才用相似赛题 `inspiration_only` | 更新 evidence brief 后再讨论/筛选 |
+| 新算法效果变差 | Git 父提交、数据/划分/特征/指标哈希、实现审查 | 方法/实现/比较 | `git-experiment-manager` 保留实验分支，`result-report-generator` 归因 | 人工拒绝后返回稳定分支；不 reset |
+| 实验结果无法直接比较 | 比较契约哈希、随机种子、环境与评估窗口 | 指标/实验 | `git-experiment-manager`、代码生成器 | 统一契约后重跑，不发布胜负结论 |
+| LaTeX 无法编译 | xelatex/latexmk、MiKTeX 初始化、字体、模板、日志；外部二进制目录可通过 `MODELING_TEX_BIN` 注入 | 交付能力 | `latex-paper-zh` | 修复工具链或按配置切换 Word；不得伪造 PDF |
+| 冻结后改变算法 | freeze、决定记录、Git 分支和受影响步骤 | 冻结证据 | `workflow-orchestrator` 标记 stale，`git-experiment-manager` 新建实验 | 解冻→重跑→重新冻结→一致性审计 |
 
 ## 六类归因判据
 
@@ -30,4 +35,3 @@
 - 指标：成功标准或比较定义不能反映任务目标。
 
 一次可记录多个候选原因，但必须用检查逐步排除。没有诊断证据时，不得以“换更复杂算法”作为默认恢复。
-

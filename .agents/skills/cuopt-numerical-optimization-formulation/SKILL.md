@@ -1,9 +1,9 @@
 ---
 name: cuopt-numerical-optimization-formulation
-version: "26.10.00"
 description: LP, MILP, QP — concepts, problem-text parsing, and formulation patterns (parameters, constraints, decisions, objective). Concepts only; no API.
 license: Apache-2.0
 metadata:
+  version: "26.10.00"
   author: NVIDIA cuOpt Team
   tags:
     - linear-programming

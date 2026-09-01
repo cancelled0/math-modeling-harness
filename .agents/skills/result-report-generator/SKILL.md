@@ -14,8 +14,10 @@ Turn saved experiment artifacts into compact evidence. Do not treat ordinary suc
 - decision ledger
 - saved tables, metrics, and figures
 - session `rigor_profile`
+- Git experiment context and comparison-contract hashes when algorithms or versions are compared
 
 Stop if the run summary claims outputs that do not exist or if main and baseline are not comparable.
+When comparing different Git experiments, stop the ranking claim if question, data, split, feature specification, or metric-definition hashes differ.
 
 # Diagnostic Classification
 
@@ -79,7 +81,7 @@ Include:
 # Rejection and Fallback
 
 - Archive a method only after a human `result_verdict` or `fallback_activation` decision.
-- Move rejected code and outputs to `workspace/archived/<Qx>/<method>_REJECTED_roundN/`.
+- With Git experiment management, preserve rejected code and outputs on the experiment branch, append the rejection event, and return to the stable branch. Do not move or delete branch files merely to express rejection.
 - Add one compact history line to `qx_method_card.md`; do not create a separate iteration log.
 - Do not archive from an AI suggestion alone.
 
@@ -99,4 +101,5 @@ Include:
 - Output concentration and fallback trigger are addressed.
 - Reports are generated only at decision points or final mode.
 - Poor results were classified before any method switch, tuning, or variable deletion was proposed.
+- Accepted/rejected version claims resolve to experiment registry records and Git commits.
 - Human verdicts are read from or appended to the canonical JSONL ledger.

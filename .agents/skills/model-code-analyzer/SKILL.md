@@ -57,6 +57,20 @@ Require:
   "implementation_target": "python",
   "random_seed": 2026,
   "approved_decision_id": "q1_method_choice",
+  "experiment_id": "Q1-M1-ROUND1",
+  "git": {
+    "branch": "exp/cumcm/q1/m1",
+    "parent_commit": "...",
+    "code_commit": null
+  },
+  "comparison_contract": {
+    "question_id": "Q1",
+    "data_hash": "...",
+    "split_hash": "...",
+    "feature_spec_hash": "...",
+    "metric_definition_hash": "..."
+  },
+  "primary_metric": {"name": "rmse", "direction": "minimize", "value": null},
   "data_profile": "workspace/data/data_profile.json",
   "feature_spec": null,
   "methods": [
@@ -97,6 +111,7 @@ Require:
 - risk-probe conditions that implementation must monitor;
 - fallback trigger evaluation;
 - paths, seed, dependencies, and expected runtime;
+- active Git experiment context and the comparison-contract hashes required by `git-experiment-manager`;
 - named review checks expected downstream.
 - evidence that dropped variables or reduced parameters match the approved feature audit; do not silently remove additional inputs in code.
 
@@ -118,3 +133,4 @@ Require:
 - Feature transformations and selections are reproducible, split-safe, and traceable when applicable.
 - Paths follow the experiment contract.
 - Handoff targets the correct language generator.
+- Run summary can be bound to a code commit and compared without relying on filenames alone.

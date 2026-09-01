@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Math Modeling Workflow Template",
+  "type": "object",
+  "required": ["schema_version", "profile", "human_checkpoints", "steps"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile": {"enum": ["lean", "submission"]},
+    "human_checkpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["reason", "policy"],
+        "properties": {
+          "reason": {"type": "string"},
+          "policy": {"const": "never_auto_approve"}
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "skill", "outputs", "checks", "gate_after"],
+        "properties": {
+          "id": {"type": "string"},
+          "skill": {"type": "string"},
+          "outputs": {"type": "array", "items": {"type": "string"}},
+          "checks": {"type": "array", "items": {"type": "string"}},
+          "gate_after": {"type": "string"},
+          "checkpoint": {
+            "type": "object",
+            "required": ["reason", "policy", "decision_type"],
+            "properties": {"policy": {"const": "never_auto_approve"}}
+          }
+        }
+      }
+    }
+  }
+}

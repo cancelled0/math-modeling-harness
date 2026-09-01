@@ -1,223 +1,81 @@
 ---
 name: workflow-orchestrator
-description: Inspect a mathematical-modeling workspace, evaluate lean or submission gates per subquestion, update machine-readable manifests, classify change impact, and route one next action without duplicating downstream work.
+description: 运行和检查数学建模工作区的文件型状态机，按子问题维护阶段门、产物、Git 实验上下文、暂停/恢复和局部重跑，并只路由一个下一动作；不替代专业建模工作。
 ---
 
-# Purpose
+# 数学建模状态机
 
-Act as the gate-driven scheduler and state reader. Do not solve models, write model code, or draft paper sections.
+读取项目 `AGENTS.md`。纯思路讨论由 `modeling-thought-partner` 旁路本 Skill；正式任务才进入状态机。
 
-`../../../AGENTS.md` is the project policy source relative to this `SKILL.md`. Read it before orchestration. If this Skill is copied elsewhere and that path is absent, locate the nearest ancestor `AGENTS.md`; report the missing policy rather than following the old `../../AGENTS.md` path.
+## 运行入口
 
-# Session Start
+优先使用 `scripts/workflow.py`：
 
-Before orchestration in a new workspace:
-
-- show `git status --short`;
-- check the chosen runtime and required core packages;
-- verify the workspace skeleton needed for the current request;
-- read `planning/session_config.json`, accepting legacy `mode`.
-
-Report warnings concisely. Do not create the full project skeleton unless the user is initializing a project.
-
-# State Sources
-
-Prefer, in order:
-
-1. `planning/manifests/Qx.json`
-2. canonical artifacts on disk
-3. legacy dashboard and legacy method/decision artifacts
-
-Never trust a dashboard over newer canonical artifacts.
-
-# Manifest Contract
-
-Maintain one compact JSON manifest per subquestion:
-
-```json
-{
-  "schema_version": 1,
-  "question_id": "Q1",
-  "rigor_profile": "lean",
-  "current_gate": "G2",
-  "status": "method_screened_waiting_human",
-  "artifacts": {
-    "source_registry": null,
-    "data_profile": "workspace/data/data_profile.json",
-    "feature_spec": null,
-    "feature_audit": null,
-    "literature_analysis": null,
-    "method_card": "methods/Q1/q1_method_card.md",
-    "decision_ledger": "methods/Q1/q1_decisions.jsonl",
-    "risk_probe": "methods/Q1/probes/risk_probe_summary.json",
-    "latest_run": null,
-    "robustness_summary": null,
-    "frozen_numbers": null
-  },
-  "allowed": {
-    "code_generation": false,
-    "freeze": false,
-    "paper_writing": false,
-    "final_assembly": false
-  },
-  "blockers": [],
-  "next_action": {
-    "owner": "human",
-    "skill": "decision-prompt-builder",
-    "reason": "method choice not recorded"
-  },
-  "updated_at": "ISO-8601"
-}
+```text
+init      初始化最小会话和每问 manifest
+status    派生当前状态，不伪造产物
+next      返回一个主要下一动作
+start     记录步骤开始与 Git 上下文
+finish    验证新产物/人工决定并完成迁移
+pause     暂停运行
+resume    从现有证据恢复
+rerun     将指定步骤及下游标记 stale，不删除历史
+check     检查模板、检查器和当前状态
+compare   调用 Git 实验的同口径比较
+export    导出证据与交付物，不包含原始数据
+smoke     在临时 Git 工作区运行模板驱动冒烟测试
 ```
 
-Update only fields affected by the current state change. Generate a human dashboard on request or at a milestone; otherwise derive status directly from manifests.
+完整定义见 [状态机](references/state-machine.md)、[步骤契约](references/step-contract.md) 和 [检查点政策](references/checkpoint-policy.md)。模板位于 `assets/`，运行器和测试必须读取同一模板，不在代码中维护另一条固定流程。
 
-The added artifact keys are optional and do not change `schema_version`. Preserve older manifests and add a key only when the corresponding artifact is relevant or exists.
+## 状态来源
 
-# Gate Evaluation
+依次使用：
 
-Evaluate each Qx independently.
+1. `planning/workflow_run.json`；
+2. `planning/manifests/Qx.json`；
+3. `planning/artifacts.json`、真实产物和 JSONL 决策；
+4. 兼容的旧产物。
 
-## G1 — PROBLEM_FRAMED
+仪表盘不能覆盖更新的 canonical 证据。每问独立推进，公共解析、分类和数据概况可以共享。
 
-Pass when parse, classification, data inventory, success criteria, and human framing exist. A placeholder in a human-owned field blocks the gate.
+## 路由主链
 
-## G2 — METHOD_SCREENED
+- 新赛题：`problem-parser` → `problem-classifier`。
+- submission 在方法讨论前：`modeling-evidence-collector` 完成学术证据扫描；论文原文由 `paper-lookup` 与 `related-paper-analyzer` 支持，外部数据回到 `data-auditor-cleaner`。
+- 数据就绪后：可选 `modeling-thought-partner` 讨论 → `method-selector`。
+- 人工方法决定后：`git-experiment-manager` → `model-code-analyzer` → 语言生成器 → `code-reviewer`。
+- 有结果：`result-report-generator` 归因 → 人工接受/调整/备选 → `robustness-checker`。
+- submission 冻结后：解释、写作包、图表、论文分节；中文 LaTeX 用 `latex-paper-zh`，英文 LaTeX 用 `latex-paper-en`。
+- 最终按一致性、完整性、质量三个审计依次通过。
 
-Pass when:
+## 人工判断
 
-- `qx_method_card.md` defines a main candidate and usable baseline;
-- the baseline completes the real task with comparable output;
-- `risk_probe_summary.json` covers applicable checks, including output degeneracy;
-- main and baseline verdicts are `PASS` or justified `CONDITIONAL`;
-- any fallback has a concrete trigger.
+只允许四类：重大题意歧义、最终方法选择、结果接受/调整/备选、数值冻结与声明范围。每个模板检查点都必须是 `never_auto_approve`；只有晚于失效时间的人类 `DECIDED` JSONL 记录才能完成步骤。
 
-Do not require a fixed number of candidates, universal PoCs, or a source-line limit.
+## Git 与重跑
 
-## G2.5 — METHOD_CHOSEN_BY_HUMAN
+算法改变先由 `git-experiment-manager` 建立实验分支。运行摘要必须包含 Git 与可比契约。`rerun` 不删除旧文件，而将受影响步骤标记 `stale`；新产物和新人工决定必须晚于失效时间。冻结证据受影响时标记 `thaw_required`，完成解冻、重跑、重新冻结和范围一致性审计。
 
-Pass when `qx_decisions.jsonl` contains a human `DECIDED` method choice citing probe evidence. While blocked, allow data preparation but not model code generation.
+## 变更影响
 
-## G3 — CODE_AND_EXPERIMENT_REVIEWED
+- `NONE`：排版、注释、非语义草稿。
+- `LOCAL`：冻结前局部探索或实现。
+- `CANONICAL`：数据口径、单位、符号、方程、参数、指标或正式图路径。
+- `FROZEN`：影响冻结数值或论文声明。
 
-Pass when:
+只重跑受影响的 Qx 和下游步骤，不因多个文件变化就自动全量审计。
 
-- approved main and baseline executed;
-- latest `run_summary.json` is complete;
-- language review contains passing named checks for syntax, input contract, method alignment, reproducibility, and output contract.
+## 输出
 
-Accept legacy Markdown review artifacts during migration, but prefer JSON for new work.
+正式调度只报告 profile、Qx、当前阶段门、阻塞/失效证据、Git branch/commit、一个主要下一动作及人工暂停理由。专业 Skill 负责内容，状态机只负责契约和迁移。
 
-## G4 — RESULTS_JUDGED_AND_FROZEN
+## 验证
 
-In `lean`, pass the result-judgment subgate when final-result and stability decisions cite computed evidence. Continue iterating without freezing when the human selects `adjust` or `fallback`.
-
-In `submission`, additionally require:
-
-- final method explanation;
-- final result analysis;
-- robustness report;
-- package sign-off in the decision ledger;
-- solution package;
-- current `frozen_numbers.json`.
-
-## G5 — PAPER_SECTION_READY
-
-Require the three writer rules, frozen-number sourcing, human-confirmed interpretation/claim scope, and verified figures.
-
-## G6 — FINAL_AUDIT_PASSED
-
-Evaluate only in `submission`. Require passing consistency, completeness, and QA artifacts. Never infer that one auditor covers another.
-
-# Routing
-
-Choose one primary next action:
-
-- missing framing → parser/classifier or human framing card;
-- missing external data, standard, statistical bulletin, or literature source → `modeling-evidence-collector`;
-- external data retrieved but not audited, or missing local data profile → `data-auditor-cleaner`;
-- data ready but derived predictors, indicators, lag/spatial/network features, or evidence-backed variable reduction is required → `feature-engineering`;
-- literature requested with no local originals → `modeling-evidence-collector` then `paper-lookup`;
-- local paper originals available but unanalyzed → `related-paper-analyzer`;
-- missing method card/probe → `method-selector`;
-- missing human method choice → `decision-prompt-builder`;
-- approved method without implementation plan → `model-code-analyzer`;
-- code/review incomplete → language generator or reviewer;
-- meaningful experiment, degraded metric, or main/baseline anomaly awaiting diagnosis → `result-report-generator`;
-- diagnosed data/feature/method/parameter/implementation/metric issue → the named producer or reviewer for that layer; do not switch algorithms speculatively;
-- final results without robustness → `robustness-checker`;
-- submission package incomplete → final explainer, result report, or package builder;
-- frozen package without a paper section → `paper-section-writer`;
-- Chinese CUMCM document/PDF formatting request → document creation/editing and PDF render verification capabilities after frozen-number prerequisites;
-- explicit English LaTeX request → `latex-paper-en`;
-- paper ready but unaudited → the earliest missing final auditor: consistency, then completeness, then QA.
-
-Do not invoke several judgment-bearing skills speculatively.
-
-# Change Impact
-
-Classify changes before scheduling checks:
-
-- `NONE`: scratch, formatting, comments, non-semantic docs.
-- `LOCAL`: exploratory code or method-card updates before freeze.
-- `CANONICAL`: schema/units, symbols, equations, parameters, official values, figure paths.
-- `FROZEN`: changes affecting frozen values or paper claims.
-
-Route checks:
-
-- `NONE`: none.
-- `LOCAL`: local tests/review.
-- `CANONICAL`: scoped consistency for affected Qx.
-- `FROZEN`: thaw log, rerun affected work, re-freeze, scoped consistency.
-
-Never schedule a full-workspace consistency audit solely because more than one file changed.
-
-# Lean vs Submission
-
-In `lean`:
-
-- require only manifests, method card, decision ledger, probe summary, and run summaries;
-- do not require per-round Markdown reports, full success logs, frozen numbers, paper artifacts, or final audits;
-- persist a detailed report only at a human decision point or final round.
-
-In `submission`:
-
-- require final explanations, reviews, analyses, robustness, package, freeze, paper, and G6;
-- run the full three-auditor layer once before final assembly.
-
-# Compatibility
-
-Read legacy artifacts when new ones are absent:
-
-- `planning/progress_dashboard.md`
-- `qx_method_candidates.md`
-- `qx_method_iteration_log.md`
-- `qx_decision_log.md`
-- `decisions/*_modeler_decision.md`
-- Markdown code reviews
-
-Also accept manifests without `source_registry`, `feature_spec`, `feature_audit`, `literature_analysis`, `robustness_summary`, or `frozen_numbers`. Add these optional keys only at the next material state update; do not bump the schema solely for this integration.
-
-Mark them `legacy_source` in the manifest and recommend migration at the next material edit. Do not regenerate legacy files for new work.
-
-# Output
-
-Return a compact state report:
-
-- profile;
-- per-question current gate and blocker;
-- artifacts changed or missing;
-- change-impact class;
-- one next action;
-- optional runners-up only when they can proceed independently.
-
-Do not paste a full dashboard or large JSON structure unless the user asks.
-
-# Verification
-
-- State is derived from current canonical artifacts.
-- Lean requirements are not confused with submission requirements.
-- Human decisions were not inferred from AI suggestions.
-- Code generation, freeze, paper writing, and final assembly flags match the gates.
-- Audit scope matches semantic impact.
-- Manifest and reported next action agree.
+- `workflow.py check` 通过；
+- `workflow.py smoke` 通过；
+- manifest 与真实产物一致；
+- discussion 模式未进入状态机；
+- 不存在超时自动批准；
+- main/基线比较契约一致；
+- LaTeX 工具不可用时状态是 `unavailable` 而不是成功。

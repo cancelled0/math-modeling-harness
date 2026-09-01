@@ -29,10 +29,12 @@ Legacy method pools and `code/model-code-analyzer.md` may be read during migrati
    - metrics to `.../metrics/`;
    - useful diagnostic/comparison figures to `.../figures/`;
    - canonical `run_summary.json`.
+   - Git experiment ID, branch/parent context, data/split/feature/metric hashes and structured primary metric required for comparable versioned experiments.
 6. Evaluate and record output-degeneracy and fallback-trigger metrics required by the plan.
 7. Persist full logs only on failure or when a warning needs reproduction.
 8. Run the code. Do not claim success from code generation alone.
 9. Hand off to `code-reviewer`.
+10. After reviewable outputs exist, use `git-experiment-manager` to bind the code commit and evidence commit; do not stage unrelated files.
 
 # Script Layout
 
@@ -81,4 +83,5 @@ Follow the schema in `model-code-analyzer`. Include:
 - Seed, inputs, versions, warnings, and errors are recorded.
 - Required concentration/degeneracy checks are saved.
 - The run summary names the data profile and applicable feature spec, and feature outputs match that contract.
+- Git and comparison-contract fields are complete enough for `compare_experiments.py`.
 - Next handoff is `code-reviewer`.

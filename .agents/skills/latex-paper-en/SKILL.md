@@ -1,11 +1,12 @@
 ---
 name: latex-paper-en
 description: English LaTeX assistant for existing .tex journal or conference papers. Use for compile repair, venue formatting, bibliography/citation checks, section writing, logic, related work, tables, pseudocode, de-AI polish, translation, adaptation, and submission readiness; use latex-thesis-zh for Chinese theses and paper-audit for critique.
-when_to_use: >-
-  Trigger on prompts like "fix my LaTeX", "proofread my IEEE paper", "rewrite related work",
-  "find the research gap", "format citations", "make a three-line table", "write pseudocode",
-  "section rewrite plan", "claim-evidence map", "换投", or requests about an English .tex manuscript.
 metadata:
+  when_to_use: >-
+    Trigger on prompts like "fix my LaTeX", "proofread my IEEE paper", "rewrite related work",
+    "find the research gap", "format citations", "make a three-line table", "write pseudocode",
+    "section rewrite plan", "claim-evidence map", "换投", or requests about an English .tex manuscript.
+  argument_hint: "[main.tex] [--section SECTION] [--module MODULE]"
   category: academic-writing
   tags:
     [
@@ -27,7 +28,6 @@ metadata:
     ]
   version: "6.0.0"
   last_updated: "2026-08-10"
-argument-hint: "[main.tex] [--section SECTION] [--module MODULE]"
 allowed-tools: Read, Glob, Grep, Bash(uv *)
 ---
 

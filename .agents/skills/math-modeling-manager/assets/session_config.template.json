@@ -3,6 +3,7 @@
   "contest_profile": "CUMCM",
   "rigor_profile": "submission",
   "interaction_mode": "speed",
+  "conversation_modes": ["discussion", "lean", "submission"],
   "execution_policy": {
     "mechanical_steps": "auto",
     "human_decisions": [
@@ -14,7 +15,25 @@
   },
   "implementation_language": "auto",
   "paper_language": "zh-CN",
-  "paper_format": "auto",
+  "paper_format": "latex",
+  "latex_engine": "xelatex",
+  "paper_format_fallback": "word",
+  "evidence_policy": {
+    "academic_scan_before_method_discussion": true,
+    "source_priority": [
+      "same-domain-academic-and-official",
+      "same-structure-adjacent-academic",
+      "similar-contest-solution-inspiration-only"
+    ],
+    "sufficiency_dimensions": ["mechanism", "method_applicability", "validation_and_baseline", "data_or_parameters"]
+  },
+  "version_control": {
+    "enabled": true,
+    "stable_branch": "main",
+    "experiment_branch_pattern": "exp/<contest>/<Qx>/<algorithm>",
+    "rollback_strategy": "git-revert",
+    "commit_unrelated_changes": false
+  },
   "random_seed": 2026,
   "active_questions": [],
   "notes": []

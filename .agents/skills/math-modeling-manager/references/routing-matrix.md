@@ -7,6 +7,7 @@
 | Skill | 何时使用 | 最低前置条件 | 主要输出 | 常见下一步 |
 |---|---|---|---|---|
 | `math-modeling-manager` | 新赛题、模糊请求、跨阶段续作、失败恢复 | 用户目标或已有工作区 | 当前阶段、主要路由、必要人工点 | `workflow-orchestrator` 或一个专业 Skill |
+| `modeling-thought-partner` | 只讨论、质疑或评价建模思路，暂不执行 | 用户想法及可选题意/证据摘要 | 自然追问、直接评价、替代方向；无文件产物 | 用户明确正式开始后 `math-modeling-manager` |
 | `workflow-orchestrator` | 读取/更新 Qx 状态、阶段门、变更影响 | 项目规则；有赛题时有最小工作区 | manifest、门状态、一个下一动作 | 对应生产 Skill |
 | `decision-prompt-builder` | 四类实质判断之一确需用户选择 | 可比较选项与证据 | 紧凑选择卡 | `modeler-decision-logger` |
 | `modeler-decision-logger` | 用户已明确回答选择卡 | 原始用户答案、证据引用 | Qx/全局 JSONL 决策记录 | `workflow-orchestrator` |
@@ -24,7 +25,7 @@
 
 | Skill | 何时使用 | 最低前置条件 | 主要输出 | 常见下一步 |
 |---|---|---|---|---|
-| `modeling-evidence-collector` | 附件不足，需要外部数据、标准、公报或论文 | Qx 与证据缺口 | `workspace/data/source_registry.json`、可追溯原始文件 | 数据交 `data-auditor-cleaner`；论文交分析器 |
+| `modeling-evidence-collector` | submission 方法讨论前的学术扫描，或附件不足需外部数据/标准/论文 | parse、classification、Qx 证据缺口 | source registry、`workspace/evidence/Qx/evidence_brief.json` | 可选思路讨论；数据审计/论文分析/方法筛选 |
 | `paper-lookup` | 需要检索论文、DOI、元数据或开放全文 | 明确检索问题 | 可复现检索结果与原文线索 | `related-paper-analyzer` |
 | `related-paper-analyzer` | 已有论文原文/可读文本，需要提取方法启示 | parse、classification、`workspace/papers/` 原文 | `workspace/papers/related_paper_analysis.md` | `method-selector` |
 | `data-auditor-cleaner` | 有赛题附件或新增外部数据，需要盘点、清洗与就绪判断 | parse、只读原始数据 | data report/profile、清洗数据 | `feature-engineering` 或 `method-selector` |
@@ -57,6 +58,7 @@
 | Skill | 何时使用 | 最低前置条件 | 主要输出 | 常见下一步 |
 |---|---|---|---|---|
 | `model-code-analyzer` | G2.5 后把方法转成实验契约 | 人工方法决定、方法卡、数据契约、适用特征规格、基线 | Qx code plan | 语言生成器 |
+| `git-experiment-manager` | 用户确认实现或改变算法，需要稳定快照、实验分支、比较、接受或恢复 | Git 仓库、明确实验范围、无未归属改动 | active experiment、commit 绑定、experiment registry | code plan/结果报告/稳定分支 |
 | `python-model-code-generator` | code plan 目标为 Python | Python code plan 与输入 | 可运行 `.py`、结果目录、run summary | `code-reviewer` |
 | `matlab-model-code-generator` | code plan 目标为 MATLAB/北太天元 | MATLAB code plan 与输入 | 可运行 `.m`、结果目录、run summary | `code-reviewer` |
 | `code-reviewer` | 模型代码生成或修改后 | code plan、代码、run summary | 语言路由 | Python/MATLAB 审查器 |
@@ -82,9 +84,10 @@
 | `paper-section-writer` | 写作包与冻结值齐全，需要分节写中文/Markdown/TeX | G4、冻结数字、人工解释、验证图 | `paper/sections/*` | 引用核验/润色 |
 | `reference-manager` | 草稿含引用或需要可追溯参考文献 | 论文草稿、论文原文/元数据 | `paper/refs.bib`、reference audit | `paper-polisher` |
 | `paper-polisher` | 内容证据已定，需要语言、公式、限定语与格式润色 | 分节草稿、冻结值、符号表 | 润色后的论文节 | 最终审计 |
+| `latex-paper-zh` | 中文 CUMCM TeX 组装、编译和 PDF 交付检查 | G4、中文 tex 分节、引用、验证图表、LaTeX 能力 | `paper/main.tex`、PDF、构建/交付报告 | `consistency-auditor` |
 | `latex-paper-en` | 用户明确要求英文 LaTeX 论文/现有 `.tex` | 英文 `.tex`、目标模板与文献 | 编译通过的英文 LaTeX 稿 | 最终审计 |
 
-中文 Word 文档创建/编辑使用当前环境的文档能力，PDF 阅读、生成与页面渲染验证使用 PDF 能力；它们不是本项目 `.agents/skills` 注册表中的项目 Skill。
+中文 CUMCM 默认保留 `latex-paper-zh` 路径；Word 是配置备选。PDF 页面渲染验证继续使用当前环境的 PDF 能力，它不是本项目 `.agents/skills` 注册表中的项目 Skill。
 
 ## 最终审计
 
@@ -93,4 +96,3 @@
 | `consistency-auditor` | canonical/frozen 变更后的范围核对，或最终跨媒体核对 | 来源与消费者清单 | scoped JSON 或最终一致性报告 | 修复/`completeness-auditor` |
 | `completeness-auditor` | 检查当前 profile 的语义证据是否齐全、当前 | manifests 与应有产物 | completeness audit | 修复/`quality-assurance-auditor` |
 | `quality-assurance-auditor` | submission 最终质量门 | G5、前两审计通过 | `paper/qa_report.md` | 最终组装或返修 |
-

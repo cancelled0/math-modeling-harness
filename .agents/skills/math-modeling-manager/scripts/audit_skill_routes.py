@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
-import tempfile
 from pathlib import Path
 
 
@@ -15,12 +15,36 @@ MANAGER_REQUIRED = (
     "references/workflow.md",
     "references/routing-matrix.md",
     "references/method-scenarios.md",
+    "references/evidence-policy.md",
     "references/failure-playbook.md",
     "references/skill-registry.json",
     "assets/session_config.template.json",
     "scripts/audit_skill_routes.py",
     "evals/routing_cases.json",
 )
+
+ORCHESTRATOR_REQUIRED = (
+    "SKILL.md",
+    "references/state-machine.md",
+    "references/step-contract.md",
+    "references/checkpoint-policy.md",
+    "references/workflow-schema.json",
+    "assets/cumcm-submission.template.json",
+    "assets/lean.template.json",
+    "scripts/workflow.py",
+    "scripts/checks/environment_check.py",
+    "scripts/checks/artifact_check.py",
+    "scripts/checks/data_ingest_check.py",
+    "scripts/checks/leakage_check.py",
+    "scripts/checks/baseline_check.py",
+    "scripts/checks/modeling_coverage_check.py",
+    "scripts/checks/claim_code_check.py",
+    "scripts/checks/frozen_number_check.py",
+    "scripts/checks/reference_check.py",
+    "scripts/checks/delivery_check.py",
+)
+
+BUILTIN_CHECKS = {"human_decision_check", "git_context_check"}
 
 FORBIDDEN_SKILL_REFS = (
     "choosing-a-forecaster",
@@ -96,12 +120,15 @@ def audit() -> tuple[list[str], dict]:
         if not (manager_dir / rel).exists():
             errors.append(f"missing manager file: {rel}")
 
+    orchestrator_dir = skill_root / "workflow-orchestrator"
+    for rel in ORCHESTRATOR_REQUIRED:
+        if not (orchestrator_dir / rel).exists():
+            errors.append(f"missing orchestrator file: {rel}")
+
     registry = load_json(registry_path)
     entries = registry.get("skills", [])
     registry_names = [entry.get("name") for entry in entries]
     registry_set = set(registry_names)
-    if len(entries) != 50:
-        errors.append(f"registry must contain 50 skills, found {len(entries)}")
     if len(registry_names) != len(registry_set):
         errors.append("duplicate names in skill registry")
 
@@ -157,9 +184,59 @@ def audit() -> tuple[list[str], dict]:
     errors.extend(check_markdown_links(manager_dir))
     errors.extend(check_explicit_skill_refs(skill_root, registry_set))
 
+    template_summaries = []
+    for template_name in ("cumcm-submission.template.json", "lean.template.json"):
+        path = orchestrator_dir / "assets" / template_name
+        if not path.exists():
+            continue
+        template = load_json(path)
+        steps = template.get("steps", [])
+        step_ids = [step.get("id") for step in steps]
+        if len(step_ids) != len(set(step_ids)):
+            errors.append(f"duplicate step ids in {template_name}")
+        for step in steps:
+            skill = step.get("skill")
+            if skill not in registry_set:
+                errors.append(f"template {template_name} has missing skill: {skill}")
+            for variants_name in ("language_variants", "paper_format_variants"):
+                variants = step.get(variants_name, {})
+                if not isinstance(variants, dict):
+                    errors.append(f"template {template_name} step {step.get('id')} has invalid {variants_name}")
+                    continue
+                for variant_name, variant in variants.items():
+                    variant_skill = variant.get("skill") if isinstance(variant, dict) else None
+                    if variant_skill and variant_skill not in registry_set:
+                        errors.append(
+                            f"template {template_name} step {step.get('id')} variant {variant_name} "
+                            f"has missing skill: {variant_skill}"
+                        )
+            for field in ("id", "outputs", "checks", "gate_after"):
+                if field not in step:
+                    errors.append(f"template {template_name} step {step.get('id')} missing {field}")
+            for check in step.get("checks", []):
+                if check in BUILTIN_CHECKS:
+                    continue
+                if not (orchestrator_dir / "scripts" / "checks" / f"{check}.py").exists():
+                    errors.append(f"template {template_name} has missing check: {check}")
+            checkpoint = step.get("checkpoint")
+            if checkpoint:
+                if checkpoint.get("reason") not in ALLOWED_PAUSES:
+                    errors.append(f"template {template_name} has invalid checkpoint reason: {checkpoint.get('reason')}")
+                if checkpoint.get("policy") != "never_auto_approve":
+                    errors.append(f"template {template_name} checkpoint can auto-approve: {step.get('id')}")
+                if not checkpoint.get("decision_type"):
+                    errors.append(f"template {template_name} checkpoint lacks decision_type: {step.get('id')}")
+        declared = template.get("human_checkpoints", [])
+        declared_reasons = {item.get("reason") for item in declared}
+        if declared_reasons != ALLOWED_PAUSES:
+            errors.append(f"template {template_name} must declare exactly four pause types")
+        if any(item.get("policy") != "never_auto_approve" for item in declared):
+            errors.append(f"template {template_name} contains an auto-approving checkpoint")
+        template_summaries.append({"template": template_name, "steps": len(steps)})
+
     cases = load_json(cases_path).get("cases", [])
-    if len(cases) < 20:
-        errors.append(f"at least 20 routing cases required, found {len(cases)}")
+    if len(cases) < 30:
+        errors.append(f"at least 30 routing cases required, found {len(cases)}")
     case_ids = [case.get("id") for case in cases]
     if len(case_ids) != len(set(case_ids)):
         errors.append("duplicate routing case ids")
@@ -191,79 +268,19 @@ def audit() -> tuple[list[str], dict]:
         "routing_case_count": len(cases),
         "categories": sorted(categories),
         "human_pause_types": sorted(observed_pauses),
+        "templates": template_summaries,
     }
     return errors, summary
 
 
-def mock_next_action(root: Path, ambiguity: bool = False) -> tuple[str, str | None]:
-    if ambiguity:
-        return "decision-prompt-builder", "material_framing_ambiguity"
-    checks = (
-        ("planning/parse/problem_parse.json", "problem-parser", None),
-        ("planning/classification/problem_classification.json", "problem-classifier", None),
-        ("workspace/data/data_profile.json", "data-auditor-cleaner", None),
-        ("methods/Q1/q1_method_card.md", "method-selector", None),
-        ("methods/Q1/q1_decisions.jsonl", "decision-prompt-builder", "final_method_choice"),
-        ("code/Q1/q1_code_plan.md", "model-code-analyzer", None),
-        ("results/Q1/experiments/round1/run_summary.json", "python-model-code-generator", None),
-        ("code/Q1/reviews/q1_python_review.json", "code-reviewer", None),
-        ("results/Q1/reports/q1_final_result_analysis.md", "result-report-generator", "result_accept_adjust_or_fallback"),
-        ("robustness/Q1/q1_robustness_summary.json", "robustness-checker", None),
-        ("results/Q1/reports/frozen_numbers.json", "solution-package-builder", "number_freeze_and_claim_scope"),
-        ("paper/sections/q1.md", "paper-section-writer", None),
-        ("paper/audits/cross_media_consistency_audit.md", "consistency-auditor", None),
-        ("paper/audits/completeness_audit.md", "completeness-auditor", None),
-        ("paper/qa_report.md", "quality-assurance-auditor", None),
-    )
-    for relative, skill, pause_reason in checks:
-        if not (root / relative).exists():
-            return skill, pause_reason
-    return "complete", None
-
-
 def run_smoke() -> dict:
-    sequence: list[str] = []
-    pauses: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="math-modeling-skill-smoke-") as temp:
-        root = Path(temp)
-        ambiguous_action, ambiguous_pause = mock_next_action(root, ambiguity=True)
-        if ambiguous_action != "decision-prompt-builder" or ambiguous_pause not in ALLOWED_PAUSES:
-            raise AssertionError("framing ambiguity did not stop at the expected human decision")
-        pauses.append(ambiguous_pause)
-
-        artifacts = (
-            ("problem-parser", "planning/parse/problem_parse.json"),
-            ("problem-classifier", "planning/classification/problem_classification.json"),
-            ("data-auditor-cleaner", "workspace/data/data_profile.json"),
-            ("method-selector", "methods/Q1/q1_method_card.md"),
-            ("decision-prompt-builder", "methods/Q1/q1_decisions.jsonl"),
-            ("model-code-analyzer", "code/Q1/q1_code_plan.md"),
-            ("python-model-code-generator", "results/Q1/experiments/round1/run_summary.json"),
-            ("code-reviewer", "code/Q1/reviews/q1_python_review.json"),
-            ("result-report-generator", "results/Q1/reports/q1_final_result_analysis.md"),
-            ("robustness-checker", "robustness/Q1/q1_robustness_summary.json"),
-            ("solution-package-builder", "results/Q1/reports/frozen_numbers.json"),
-            ("paper-section-writer", "paper/sections/q1.md"),
-            ("consistency-auditor", "paper/audits/cross_media_consistency_audit.md"),
-            ("completeness-auditor", "paper/audits/completeness_audit.md"),
-            ("quality-assurance-auditor", "paper/qa_report.md"),
-        )
-        for expected, artifact in artifacts:
-            action, pause = mock_next_action(root)
-            if action != expected:
-                raise AssertionError(f"expected {expected}, got {action}")
-            sequence.append(action)
-            if pause:
-                pauses.append(pause)
-            path = root / artifact
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("{}\n", encoding="utf-8")
-        action, pause = mock_next_action(root)
-        if action != "complete" or pause is not None:
-            raise AssertionError("mock workflow did not reach completion")
-    if set(pauses) != ALLOWED_PAUSES or len(pauses) != 4:
-        raise AssertionError(f"unexpected human pause set: {pauses}")
-    return {"steps": sequence, "human_pauses": pauses, "status": "PASSED"}
+    workflow_path = Path(__file__).resolve().parents[2] / "workflow-orchestrator" / "scripts" / "workflow.py"
+    spec = importlib.util.spec_from_file_location("math_modeling_workflow_runtime", workflow_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("cannot load workflow runtime")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.smoke_test()
 
 
 def main() -> int:
