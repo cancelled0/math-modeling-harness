@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contest_profile": "CUMCM",
+  "rigor_profile": "submission",
+  "interaction_mode": "speed",
+  "execution_policy": {
+    "mechanical_steps": "auto",
+    "human_decisions": [
+      "material_framing_ambiguity",
+      "final_method_choice",
+      "result_accept_adjust_or_fallback",
+      "number_freeze_and_claim_scope"
+    ]
+  },
+  "implementation_language": "auto",
+  "paper_language": "zh-CN",
+  "paper_format": "auto",
+  "random_seed": 2026,
+  "active_questions": [],
+  "notes": []
+}

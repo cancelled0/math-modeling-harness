@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "new-full-contest-problem",
+      "request": "开始解决一套新的完整 CUMCM 赛题",
+      "state": "没有 parse、manifest 或数据概况",
+      "expected_primary": "problem-parser",
+      "expected_supporting": ["workflow-orchestrator"],
+      "human_pause": false
+    },
+    {
+      "id": "material-framing-ambiguity",
+      "request": "题目中的公平同时可能指方差最小或最差群体保障",
+      "state": "两种解释会改变目标函数，题面无法消歧",
+      "expected_primary": "decision-prompt-builder",
+      "expected_supporting": ["modeler-decision-logger"],
+      "human_pause": true,
+      "pause_reason": "material_framing_ambiguity"
+    },
+    {
+      "id": "no-local-data",
+      "request": "题目没有附件，需要补充城市人口和交通公报",
+      "state": "Qx 与字段需求已明确",
+      "expected_primary": "modeling-evidence-collector",
+      "expected_supporting": ["data-auditor-cleaner"],
+      "human_pause": false
+    },
+    {
+      "id": "excel-attachments",
+      "request": "检查赛题附带的多个 Excel 工作表并清洗",
+      "state": "parse 已完成，data_raw 有 xlsx",
+      "expected_primary": "data-auditor-cleaner",
+      "expected_supporting": [],
+      "human_pause": false
+    },
+    {
+      "id": "single-series-forecast",
+      "request": "对每小时负荷单序列做未来 24 步预测",
+      "state": "G2.5 已选择单序列预测方法，频率和时间划分明确",
+      "expected_primary": "forecasting-single-series",
+      "expected_supporting": ["statsmodels", "feature-engineering"],
+      "human_pause": false
+    },
+    {
+      "id": "spatial-vector-data",
+      "request": "已确认用行政区矢量数据做空间连接和区域统计",
+      "state": "G2.5 已通过，CRS 与字段可用",
+      "expected_primary": "geopandas",
+      "expected_supporting": ["feature-engineering"],
+      "human_pause": false
+    },
+    {
+      "id": "ranking-evaluation",
+      "request": "为 30 个城市建立多指标排名并提供稳健基线",
+      "state": "G1 与数据概况完成，尚未选方法",
+      "expected_primary": "method-selector",
+      "expected_supporting": ["feature-engineering"],
+      "human_pause": false
+    },
+    {
+      "id": "lp-milp-formulation",
+      "request": "把已选择的仓储选址方案写成 MILP 变量、约束和目标",
+      "state": "G2.5 已选择 MILP，约束和单位已确认",
+      "expected_primary": "cuopt-numerical-optimization-formulation",
+      "expected_supporting": ["model-code-analyzer"],
+      "human_pause": false
+    },
+    {
+      "id": "multiobjective-optimization",
+      "request": "实现成本与碳排冲突的 Pareto 优化",
+      "state": "G2.5 已选择多目标方法，目标和边界已定义",
+      "expected_primary": "pymoo",
+      "expected_supporting": ["robustness-checker"],
+      "human_pause": false
+    },
+    {
+      "id": "graph-network",
+      "request": "求运输网络的最短路和关键节点",
+      "state": "G2.5 已通过，节点边和业务权重明确",
+      "expected_primary": "networkx",
+      "expected_supporting": [],
+      "human_pause": false
+    },
+    {
+      "id": "design-before-data",
+      "request": "设计一个含三因素的可实施实验，数据尚未采集",
+      "state": "研究目标和可控因素明确",
+      "expected_primary": "experimental-design",
+      "expected_supporting": ["statistical-power"],
+      "human_pause": false
+    },
+    {
+      "id": "target-leakage",
+      "request": "审查后发现标准化和特征选择在全数据上拟合",
+      "state": "G3 被泄漏检查阻塞",
+      "expected_primary": "feature-engineering",
+      "expected_supporting": ["python-code-reviewer"],
+      "human_pause": false
+    },
+    {
+      "id": "overfitting-diagnosis",
+      "request": "训练集很好但验证集明显退化，先判断为什么",
+      "state": "主方法和基线 run summary 可比",
+      "expected_primary": "result-report-generator",
+      "expected_supporting": ["feature-engineering", "robustness-checker"],
+      "human_pause": false
+    },
+    {
+      "id": "irrelevant-variables",
+      "request": "删除与目标无关的变量，但要避免只看一次重要性",
+      "state": "划分契约和可运行模型存在",
+      "expected_primary": "feature-engineering",
+      "expected_supporting": ["shap", "robustness-checker"],
+      "human_pause": false
+    },
+    {
+      "id": "unidentifiable-parameters",
+      "request": "机理模型多个参数互相补偿，估计不可识别",
+      "state": "模型已运行且有校准结果",
+      "expected_primary": "robustness-checker",
+      "expected_supporting": ["pymc", "sympy"],
+      "human_pause": false
+    },
+    {
+      "id": "unstable-results",
+      "request": "结果随随机种子和划分大幅变化",
+      "state": "G3 通过，稳定性证据缺失",
+      "expected_primary": "robustness-checker",
+      "expected_supporting": [],
+      "human_pause": false
+    },
+    {
+      "id": "infeasible-optimization",
+      "request": "MILP 求解器返回 infeasible，需要查约束",
+      "state": "已批准 MILP，代码与约束表存在",
+      "expected_primary": "cuopt-numerical-optimization-formulation",
+      "expected_supporting": ["code-reviewer"],
+      "human_pause": false
+    },
+    {
+      "id": "literature-search",
+      "request": "检索城市韧性评价相关论文并分析可迁移方法",
+      "state": "问题已解析，papers 为空，允许外部检索",
+      "expected_primary": "modeling-evidence-collector",
+      "expected_supporting": ["paper-lookup", "related-paper-analyzer"],
+      "human_pause": false
+    },
+    {
+      "id": "external-dataset-provenance",
+      "request": "下载官方气象数据并记录许可、时间范围和哈希",
+      "state": "字段需求、地区和年份明确",
+      "expected_primary": "modeling-evidence-collector",
+      "expected_supporting": ["data-auditor-cleaner"],
+      "human_pause": false
+    },
+    {
+      "id": "chinese-word-paper",
+      "request": "把冻结结果写成中文 CUMCM Word 论文",
+      "state": "G4、写作包和 frozen_numbers 已完成",
+      "expected_primary": "paper-section-writer",
+      "expected_supporting": ["reference-manager", "paper-polisher"],
+      "human_pause": false,
+      "external_capability": "documents and pdf render verification"
+    },
+    {
+      "id": "english-latex-paper",
+      "request": "修订现有英文 LaTeX 竞赛论文并检查编译",
+      "state": "用户明确要求英文 tex，证据已冻结",
+      "expected_primary": "latex-paper-en",
+      "expected_supporting": ["reference-manager"],
+      "human_pause": false
+    },
+    {
+      "id": "final-audit",
+      "request": "提交前进行三层最终审计",
+      "state": "所有 Qx 已到 G5，尚无最终审计",
+      "expected_primary": "consistency-auditor",
+      "expected_supporting": ["completeness-auditor", "quality-assurance-auditor"],
+      "human_pause": false
+    },
+    {
+      "id": "main-worse-than-baseline",
+      "request": "主方法不如可用基线，判断是哪里出了问题",
+      "state": "同数据同划分同指标的运行证据完整",
+      "expected_primary": "result-report-generator",
+      "expected_supporting": ["decision-prompt-builder"],
+      "human_pause": true,
+      "pause_reason": "result_accept_adjust_or_fallback"
+    },
+    {
+      "id": "method-choice",
+      "request": "风险探针已经完成，请确定最终主方法",
+      "state": "G2 通过但决策账本没有 method_choice",
+      "expected_primary": "decision-prompt-builder",
+      "expected_supporting": ["modeler-decision-logger"],
+      "human_pause": true,
+      "pause_reason": "final_method_choice"
+    },
+    {
+      "id": "freeze-and-claim-scope",
+      "request": "批准写作包中的数值和论文声明范围并冻结",
+      "state": "最终解释、结果、鲁棒性和图表齐全，缺 package_signoff",
+      "expected_primary": "solution-package-builder",
+      "expected_supporting": ["decision-prompt-builder"],
+      "human_pause": true,
+      "pause_reason": "number_freeze_and_claim_scope"
+    }
+  ]
+}
+
