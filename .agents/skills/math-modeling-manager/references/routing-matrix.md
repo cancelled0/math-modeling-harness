@@ -84,10 +84,10 @@
 | `paper-section-writer` | 写作包与冻结值齐全，需要分节写中文/Markdown/TeX | G4、冻结数字、人工解释、验证图 | `paper/sections/*` | 引用核验/润色 |
 | `reference-manager` | 草稿含引用或需要可追溯参考文献 | 论文草稿、论文原文/元数据 | `paper/refs.bib`、reference audit | `paper-polisher` |
 | `paper-polisher` | 内容证据已定，需要语言、公式、限定语与格式润色 | 分节草稿、冻结值、符号表 | 润色后的论文节 | 最终审计 |
-| `latex-paper-zh` | 中文 CUMCM TeX 组装、编译和 PDF 交付检查 | G4、中文 tex 分节、引用、验证图表、LaTeX 能力 | `paper/main.tex`、PDF、构建/交付报告 | `consistency-auditor` |
+| `latex-paper-zh` | 中文 CUMCM TeX 组装、PDF 编译，或从当前 TeX 派生可追溯 DOCX 镜像 | G4、中文 tex 分节、引用、验证图表、LaTeX 能力；双交付另需 Pandoc | `paper/main.tex`、PDF、`paper/exports/main.docx`、构建/导出/交付报告 | `consistency-auditor` |
 | `latex-paper-en` | 用户明确要求英文 LaTeX 论文/现有 `.tex` | 英文 `.tex`、目标模板与文献 | 编译通过的英文 LaTeX 稿 | 最终审计 |
 
-中文 CUMCM 默认保留 `latex-paper-zh` 路径；Word 是配置备选。PDF 页面渲染验证继续使用当前环境的 PDF 能力，它不是本项目 `.agents/skills` 注册表中的项目 Skill。
+中文 CUMCM 默认使用 `latex-paper-zh` 的 LaTeX 主源 + DOCX 镜像路径；显式 Word 主格式仍是配置备选。PDF 页面渲染与 DOCX 文档渲染继续使用当前环境能力，它们不是本项目 `.agents/skills` 注册表中的项目 Skill。
 
 ## 最终审计
 

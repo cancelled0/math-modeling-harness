@@ -6,6 +6,13 @@
   "properties": {
     "schema_version": {"const": 1},
     "profile": {"enum": ["lean", "submission"]},
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "paper_format": {"enum": ["latex", "word", "markdown", "none"]},
+        "delivery_mode": {"enum": ["single", "latex_primary_docx_mirror"]}
+      }
+    },
     "human_checkpoints": {
       "type": "array",
       "items": {
@@ -28,6 +35,10 @@
           "outputs": {"type": "array", "items": {"type": "string"}},
           "checks": {"type": "array", "items": {"type": "string"}},
           "gate_after": {"type": "string"},
+          "paper_formats": {"type": "array", "items": {"type": "string"}},
+          "delivery_modes": {"type": "array", "items": {"type": "string"}},
+          "delivery_artifact": {"type": "boolean"},
+          "external_capabilities": {"type": "array", "items": {"type": "string"}},
           "checkpoint": {
             "type": "object",
             "required": ["reason", "policy", "decision_type"],

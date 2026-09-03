@@ -42,6 +42,16 @@ ORCHESTRATOR_REQUIRED = (
     "scripts/checks/frozen_number_check.py",
     "scripts/checks/reference_check.py",
     "scripts/checks/delivery_check.py",
+    "scripts/checks/docx_delivery_check.py",
+)
+
+LATEX_ZH_REQUIRED = (
+    "SKILL.md",
+    "scripts/compile_latex.py",
+    "scripts/check_latex_delivery.py",
+    "scripts/export_docx.py",
+    "scripts/check_docx_delivery.py",
+    "evals/test_latex_tools.py",
 )
 
 BUILTIN_CHECKS = {"human_decision_check", "git_context_check"}
@@ -125,6 +135,15 @@ def audit() -> tuple[list[str], dict]:
         if not (orchestrator_dir / rel).exists():
             errors.append(f"missing orchestrator file: {rel}")
 
+    latex_zh_dir = skill_root / "latex-paper-zh"
+    for rel in LATEX_ZH_REQUIRED:
+        if not (latex_zh_dir / rel).exists():
+            errors.append(f"missing Chinese LaTeX delivery file: {rel}")
+
+    session_template = load_json(manager_dir / "assets" / "session_config.template.json")
+    if session_template.get("delivery_mode") != "latex_primary_docx_mirror":
+        errors.append("submission session default must use the canonical-LaTeX DOCX mirror mode")
+
     registry = load_json(registry_path)
     entries = registry.get("skills", [])
     registry_names = [entry.get("name") for entry in entries]
@@ -190,6 +209,9 @@ def audit() -> tuple[list[str], dict]:
         if not path.exists():
             continue
         template = load_json(path)
+        defaults = template.get("defaults", {})
+        if defaults.get("delivery_mode") not in {"single", "latex_primary_docx_mirror"}:
+            errors.append(f"template {template_name} has invalid default delivery_mode")
         steps = template.get("steps", [])
         step_ids = [step.get("id") for step in steps]
         if len(step_ids) != len(set(step_ids)):
@@ -210,6 +232,11 @@ def audit() -> tuple[list[str], dict]:
                             f"template {template_name} step {step.get('id')} variant {variant_name} "
                             f"has missing skill: {variant_skill}"
                         )
+            delivery_modes = step.get("delivery_modes", [])
+            if not isinstance(delivery_modes, list) or any(
+                mode not in {"single", "latex_primary_docx_mirror"} for mode in delivery_modes
+            ):
+                errors.append(f"template {template_name} step {step.get('id')} has invalid delivery_modes")
             for field in ("id", "outputs", "checks", "gate_after"):
                 if field not in step:
                     errors.append(f"template {template_name} step {step.get('id')} missing {field}")
@@ -233,6 +260,12 @@ def audit() -> tuple[list[str], dict]:
         if any(item.get("policy") != "never_auto_approve" for item in declared):
             errors.append(f"template {template_name} contains an auto-approving checkpoint")
         template_summaries.append({"template": template_name, "steps": len(steps)})
+
+    submission = load_json(orchestrator_dir / "assets" / "cumcm-submission.template.json")
+    submission_steps = {step.get("id"): step for step in submission.get("steps", [])}
+    docx_step = submission_steps.get("docx-export")
+    if not docx_step or docx_step.get("delivery_modes") != ["latex_primary_docx_mirror"]:
+        errors.append("submission template lacks the canonical-LaTeX DOCX mirror route")
 
     cases = load_json(cases_path).get("cases", [])
     if len(cases) < 30:

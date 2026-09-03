@@ -277,6 +277,23 @@
       "expected_supporting": ["decision-prompt-builder"],
       "human_pause": true,
       "pause_reason": "number_freeze_and_claim_scope"
+    },
+    {
+      "id": "latex-primary-docx-mirror",
+      "request": "以 LaTeX 为主稿，同时生成供审阅和提交的 Word 版本",
+      "state": "G4 已通过，中文 tex 分节、引用和图表齐全，delivery_mode=latex_primary_docx_mirror",
+      "expected_primary": "latex-paper-zh",
+      "expected_supporting": ["consistency-auditor"],
+      "human_pause": false,
+      "external_capability": "documents and docx render verification"
+    },
+    {
+      "id": "stale-docx-after-overleaf-edit",
+      "request": "Overleaf 上改过 TeX 后检查 Word 是否仍与主稿一致",
+      "state": "当前 main.tex 哈希与 docx_export_report 不一致",
+      "expected_primary": "latex-paper-zh",
+      "expected_supporting": ["consistency-auditor", "workflow-orchestrator"],
+      "human_pause": false
     }
   ]
 }

@@ -14,7 +14,7 @@
 - 默认比赛为 CUMCM，工作语言和论文语言为简体中文。
 - 完整赛题默认 `rigor_profile=submission`；局部实验、学习、临时分析默认 `lean`。
 - 自动选择实现语言时优先 Python；用户指定 MATLAB、北太天元，或现有主工程为 `.m` 时使用 MATLAB 路径。
-- 中文 CUMCM 默认保留中文 LaTeX→PDF 路径，使用 `latex-paper-zh`；编译前必须检查 XeLaTeX/latexmk、字体与模板能力。工具链不可用时明确报告，不得伪造编译成功；Word/Markdown 是可配置的备选交付路径。
+- 中文 CUMCM 默认使用 `delivery_mode=latex_primary_docx_mirror`：`paper/main.tex` 是唯一权威论文源，先用 `latex-paper-zh` 生成并核对 PDF，再由同一 Skill 通过 Pandoc 派生 `paper/exports/main.docx`。编译前必须检查 XeLaTeX/latexmk、Pandoc、字体与模板能力；工具链不可用时明确报告，不得伪造成功。显式选择 Word/Markdown 主格式时仍可走独立备选路径。
 
 ## 自动推进与人工判断
 
@@ -51,3 +51,4 @@
 - Git 已由用户明确要求并纳入 Harness。新赛题只在实际初始化时创建必要分支和状态，不为未开始的赛题制造提交。
 - 不使用或搬动项目根目录下空的 `skills` 目录；项目级 Skills 固定存放在 `.agents/skills/`。
 - 修改冻结数字或论文声明时，执行解冻记录、受影响流程重跑、重新冻结与范围一致性审计。
+- DOCX 只用于审阅或要求 Word 的交付，不是可反向覆盖 `.tex` 的权威源。Word 中的人工修改必须先同步回 LaTeX，再重新生成 PDF/DOCX；Overleaf 修改也必须同步回本地 `.tex` 并用 Git 提交后再导出，禁止维护两份相互漂移的正文。

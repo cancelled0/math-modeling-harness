@@ -23,6 +23,9 @@
 | 新算法效果变差 | Git 父提交、数据/划分/特征/指标哈希、实现审查 | 方法/实现/比较 | `git-experiment-manager` 保留实验分支，`result-report-generator` 归因 | 人工拒绝后返回稳定分支；不 reset |
 | 实验结果无法直接比较 | 比较契约哈希、随机种子、环境与评估窗口 | 指标/实验 | `git-experiment-manager`、代码生成器 | 统一契约后重跑，不发布胜负结论 |
 | LaTeX 无法编译 | xelatex/latexmk、MiKTeX 初始化、字体、模板、日志；外部二进制目录可通过 `MODELING_TEX_BIN` 注入 | 交付能力 | `latex-paper-zh` | 修复工具链或按配置切换 Word；不得伪造 PDF |
+| DOCX 无法从 TeX 导出 | Pandoc/`MODELING_PANDOC`、不受支持宏、资源路径、参考文献和图片 | 交付能力 | `latex-paper-zh` | 简化仅影响排版的宏或显式切换主格式；不得手工维护第二份正文冒充镜像 |
+| DOCX 与 TeX 不同步 | export report 的源哈希、当前 `main.tex`、Overleaf/Word 人工修改 | 交付一致性 | `latex-paper-zh`、`consistency-auditor` | 将人工修改回写权威 TeX，Git 提交后重编译并重新导出 |
+| DOCX 结构通过但视觉未核对 | LibreOffice/文档渲染器、分页、公式、表格、图片和字体替代 | 交付能力 | `latex-paper-zh` | 保持 `visual_check_pending`，补做逐页核对后再过 G5 |
 | 冻结后改变算法 | freeze、决定记录、Git 分支和受影响步骤 | 冻结证据 | `workflow-orchestrator` 标记 stale，`git-experiment-manager` 新建实验 | 解冻→重跑→重新冻结→一致性审计 |
 
 ## 六类归因判据

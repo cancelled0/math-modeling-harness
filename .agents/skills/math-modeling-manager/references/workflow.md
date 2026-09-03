@@ -10,7 +10,7 @@
 
 - 完整 CUMCM 使用 `submission`，局部实验使用 `lean`。
 - `workflow.py init` 只创建最小 planning 状态和每问 manifest。
-- 检查 Git、Python/MATLAB、LaTeX、字体和必要包；不可用能力必须显式报告。
+- 检查 Git、Python/MATLAB、LaTeX、Pandoc、字体和必要包；双交付还要检查 DOCX 渲染能力，不可用能力必须显式报告。
 - `main` 保存已接受状态；原始大数据、密钥、缓存和大型模型不纳入 Git。
 
 ## S1 题意理解与 G1
@@ -64,12 +64,13 @@ submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：
 1. 最终方法解释、结果分析、图表计划和验证图件齐全。
 2. `paper-section-writer` 只从写作包、冻结数字、人工决定和验证图表写作。
 3. `reference-manager` 核验引用，`paper-polisher` 润色。
-4. 中文 CUMCM 使用 `latex-paper-zh` 组装 XeLaTeX 论文并生成构建/交付报告；工具链缺失时状态为 `unavailable`，可按配置使用 Word 备选。
-5. 英文 LaTeX 使用 `latex-paper-en`。
+4. 中文 CUMCM 默认采用 `latex_primary_docx_mirror`：`paper/main.tex` 为唯一权威源，`latex-paper-zh` 先组装并编译 XeLaTeX PDF，再用 Pandoc 派生 DOCX，记录源文件与输出哈希，并对两种格式执行交付检查。
+5. DOCX 是审阅/提交镜像，不反向覆盖 TeX；Word 或 Overleaf 上的人工修改须同步回本地 TeX、提交 Git 并重新生成。工具链缺失时状态为 `unavailable`，也可以按用户配置切换为 Word 主格式。
+6. 英文 LaTeX 使用 `latex-paper-en`。
 
 ## S7 三层审计与 G6
 
-依次执行 `consistency-auditor`、`completeness-auditor`、`quality-assurance-auditor`。最终 PDF 还需页面渲染检查。全部通过后创建 release commit/tag 并导出交付物。
+依次执行 `consistency-auditor`、`completeness-auditor`、`quality-assurance-auditor`。最终 PDF 和 DOCX 均需页面渲染检查；DOCX 还必须与当前 TeX 哈希一致。全部通过后创建 release commit/tag 并导出交付物。
 
 ## 失效与恢复
 
@@ -79,4 +80,3 @@ submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：
 - `FROZEN`：记录解冻，重跑、重新冻结并做范围一致性审计。
 
 旧产物不删除；新产物和人工决定必须晚于 stale 时间。算法差方案通过保留分支返回稳定状态，已合并方案用 `git revert`，不破坏历史。
-

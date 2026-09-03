@@ -5,6 +5,7 @@
     "contest_profile": "CUMCM",
     "paper_language": "zh-CN",
     "paper_format": "none",
+    "delivery_mode": "single",
     "implementation_language": "auto",
     "requires_academic_evidence_scan": false
   },

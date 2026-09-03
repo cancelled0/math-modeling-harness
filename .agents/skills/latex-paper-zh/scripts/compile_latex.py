@@ -30,6 +30,19 @@ def compiler_environment() -> dict[str, str]:
     return environment
 
 
+def operational(command: str | None) -> bool:
+    if not command:
+        return False
+    try:
+        process = subprocess.run(
+            [command, "--version"], text=True, encoding="utf-8", errors="replace",
+            capture_output=True, timeout=20, env=compiler_environment(),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return process.returncode == 0
+
+
 def unavailable_runtime(output: str) -> bool:
     normalized = output.lower()
     markers = (
@@ -65,16 +78,20 @@ def compile_tex(main: Path, engine: str, timeout: int) -> tuple[dict, int]:
 
     latexmk = locate("latexmk")
     xelatex = locate("xelatex")
-    if engine == "latexmk" and (not latexmk or not xelatex):
+    latexmk_ok = operational(latexmk)
+    xelatex_ok = operational(xelatex)
+    if engine == "latexmk" and (not latexmk_ok or not xelatex_ok):
         report["status"] = "unavailable"
-        report["errors"].append("latexmk with xelatex is not available")
+        report["errors"].append("latexmk with xelatex is not operational; latexmk may require a Perl runtime")
         return report, 2
-    if engine == "xelatex" and not xelatex:
+    if engine == "xelatex" and not xelatex_ok:
         report["status"] = "unavailable"
         report["errors"].append("xelatex is not available")
         return report, 2
     if engine == "auto":
-        engine = "latexmk" if latexmk and xelatex else "xelatex" if xelatex else "unavailable"
+        engine = "latexmk" if latexmk_ok and xelatex_ok else "xelatex" if xelatex_ok else "unavailable"
+        if latexmk and not latexmk_ok and xelatex_ok:
+            report["warnings"].append("latexmk is present but not operational; falling back to two XeLaTeX passes")
     if engine == "unavailable":
         report["status"] = "unavailable"
         report["errors"].append("neither latexmk nor xelatex is available; set MODELING_TEX_BIN or install a TeX distribution")

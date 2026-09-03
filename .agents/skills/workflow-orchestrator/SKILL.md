@@ -46,7 +46,7 @@ smoke     在临时 Git 工作区运行模板驱动冒烟测试
 - 数据就绪后：可选 `modeling-thought-partner` 讨论 → `method-selector`。
 - 人工方法决定后：`git-experiment-manager` → `model-code-analyzer` → 语言生成器 → `code-reviewer`。
 - 有结果：`result-report-generator` 归因 → 人工接受/调整/备选 → `robustness-checker`。
-- submission 冻结后：解释、写作包、图表、论文分节；中文 LaTeX 用 `latex-paper-zh`，英文 LaTeX 用 `latex-paper-en`。
+- submission 冻结后：解释、写作包、图表、论文分节；中文默认由 `latex-paper-zh` 先构建 PDF，再从唯一 TeX 主源派生带哈希的 DOCX 镜像，英文 LaTeX 用 `latex-paper-en`。
 - 最终按一致性、完整性、质量三个审计依次通过。
 
 ## 人工判断
@@ -79,3 +79,4 @@ smoke     在临时 Git 工作区运行模板驱动冒烟测试
 - 不存在超时自动批准；
 - main/基线比较契约一致；
 - LaTeX 工具不可用时状态是 `unavailable` 而不是成功。
+- 双交付模式按 `latex-build` → `docx-export` 顺序推进，DOCX 与当前 TeX 哈希不一致时不能完成 G5。

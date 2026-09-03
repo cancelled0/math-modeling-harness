@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -22,6 +23,7 @@ ASSET_DIR = SKILL_DIR / "assets"
 CHECK_DIR = SCRIPT_DIR / "checks"
 GATE_ORDER = {"G0": 0, "G1": 1, "G2": 2, "G2.5": 3, "G3": 4, "G4": 5, "G5": 6, "G6": 7}
 BUILTIN_CHECKS = {"human_decision_check", "git_context_check"}
+DELIVERY_SOURCE_SUFFIXES = {".tex", ".bib", ".cls", ".sty", ".png", ".jpg", ".jpeg", ".pdf", ".svg"}
 
 
 class WorkflowError(RuntimeError):
@@ -103,8 +105,28 @@ def render(value: str, question: str) -> str:
     return value.format(question=question, question_lower=question.lower())
 
 
+def delivery_source_bundle(root: Path, main: Path) -> str:
+    records: list[tuple[str, str]] = []
+    generated_pdf = main.with_suffix(".pdf")
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in DELIVERY_SOURCE_SUFFIXES or path == generated_pdf:
+            continue
+        relative = path.relative_to(root).as_posix()
+        if relative.startswith("exports/"):
+            continue
+        records.append((relative, hashlib.sha256(path.read_bytes()).hexdigest()))
+    digest = hashlib.sha256()
+    for relative, file_hash in records:
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
 def applicable_steps(template: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
     paper_format = config.get("paper_format", template.get("defaults", {}).get("paper_format"))
+    delivery_mode = config.get("delivery_mode", template.get("defaults", {}).get("delivery_mode", "single"))
     language = config.get("implementation_language", "auto")
     if language == "auto":
         language = "python"
@@ -119,6 +141,9 @@ def applicable_steps(template: dict[str, Any], config: dict[str, Any]) -> list[d
             step.update(paper_variant)
         formats = step.get("paper_formats")
         if formats and paper_format not in formats:
+            continue
+        delivery_modes = step.get("delivery_modes")
+        if delivery_modes and delivery_mode not in delivery_modes:
             continue
         result.append(step)
     return result
@@ -212,6 +237,13 @@ def step_complete(workspace: Path, manifest: dict[str, Any], step: dict[str, Any
     for relative in outputs_for(step, manifest["question_id"]):
         if not output_valid(workspace / relative, stale_since):
             return False
+    if "docx_delivery_check" in step.get("checks", []):
+        process = subprocess.run(
+            [sys.executable, str(CHECK_DIR / "docx_delivery_check.py"), "--paper-root", str(workspace / "paper")],
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30,
+        )
+        if process.returncode:
+            return False
     return True
 
 
@@ -236,6 +268,8 @@ def derive_question(
         next_step = step
         if step.get("checkpoint"):
             record["status"] = "waiting_human"
+        elif record.get("status") == "completed":
+            record.update({"status": "stale", "stale_since": now(), "error": "completed evidence no longer validates"})
         elif record.get("status") not in {"running", "failed", "stale"}:
             record["status"] = "ready"
         break
@@ -244,10 +278,9 @@ def derive_question(
         step["id"] == "method-choice" and step_complete(workspace, manifest, step) for step in steps
     )
     frozen = any(step["id"] == "freeze" and step_complete(workspace, manifest, step) for step in steps)
-    paper_ready = any(
-        step["id"] in {"latex-build", "word-build", "markdown-build"}
-        and step_complete(workspace, manifest, step)
-        for step in steps
+    delivery_steps = [step for step in steps if step.get("delivery_artifact")]
+    paper_ready = bool(delivery_steps) and all(
+        step_complete(workspace, manifest, step) for step in delivery_steps
     )
     complete = next_step is None
     manifest["current_gate"] = "G6" if complete and run["profile"] == "submission" else current_gate
@@ -331,9 +364,16 @@ def cmd_init(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
     if not git["available"] and not args.allow_no_git:
         raise WorkflowError("formal harness requires a Git repository; pass --allow-no-git only for isolated diagnostics")
     defaults = dict(template.get("defaults", {}))
+    selected_paper_format = args.paper_format or defaults.get("paper_format")
+    selected_delivery_mode = getattr(args, "delivery_mode", None)
+    if selected_delivery_mode is None:
+        selected_delivery_mode = defaults.get("delivery_mode", "single")
+        if args.paper_format and args.paper_format != "latex":
+            selected_delivery_mode = "single"
     defaults.update({
         "contest_profile": args.contest,
-        "paper_format": args.paper_format or defaults.get("paper_format"),
+        "paper_format": selected_paper_format,
+        "delivery_mode": selected_delivery_mode,
         "implementation_language": args.language,
         "random_seed": args.seed,
     })
@@ -359,6 +399,7 @@ def cmd_init(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
             "implementation_language": args.language,
             "paper_language": defaults.get("paper_language", "zh-CN"),
             "paper_format": defaults.get("paper_format", "latex"),
+            "delivery_mode": defaults.get("delivery_mode", "single"),
             "random_seed": args.seed,
             "active_questions": questions,
             "version_control": {"enabled": git["available"], "stable_branch": git.get("branch") or "main"},
@@ -444,6 +485,13 @@ def validate_step(workspace: Path, manifest: dict[str, Any], step: dict[str, Any
         decision_path = workspace / render(decision_relative, manifest["question_id"])
         if not latest_decision(decision_path, checkpoint["decision_type"], stale_since):
             errors.append(f"missing fresh human DECIDED record: {checkpoint['decision_type']}")
+    if "docx_delivery_check" in step.get("checks", []) and not errors:
+        process = subprocess.run(
+            [sys.executable, str(CHECK_DIR / "docx_delivery_check.py"), "--paper-root", str(workspace / "paper")],
+            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30,
+        )
+        if process.returncode:
+            errors.append("DOCX delivery check failed: " + (process.stdout or process.stderr).strip())
     return errors
 
 
@@ -605,8 +653,37 @@ def create_smoke_output(workspace: Path, step: dict[str, Any], question: str) ->
             write_json(path, {"schema_version": 1, "status": "smoke"})
         elif path.suffix == ".pdf":
             path.write_bytes(b"%PDF-1.4\n% structural smoke fixture\n")
+        elif path.suffix == ".docx":
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("[Content_Types].xml", "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>")
+                archive.writestr("_rels/.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>")
+                archive.writestr("word/document.xml", "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>smoke</w:t></w:r></w:p></w:body></w:document>")
+                archive.writestr("word/styles.xml", "<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"/>")
         else:
             path.write_text("smoke evidence\n", encoding="utf-8")
+    if step.get("id") == "docx-export":
+        source = workspace / "paper" / "main.tex"
+        docx = workspace / "paper" / "exports" / "main.docx"
+        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        docx_hash = hashlib.sha256(docx.read_bytes()).hexdigest()
+        write_json(workspace / "paper" / "docx_export_report.json", {
+            "schema_version": 1,
+            "status": "passed",
+            "canonical_source": str(source),
+            "source_sha256": source_hash,
+            "source_bundle_sha256": delivery_source_bundle(source.parent, source),
+            "output": str(docx),
+            "output_sha256": docx_hash,
+            "docx_is_derived": True,
+        })
+        write_json(workspace / "paper" / "docx_delivery_check.json", {
+            "schema_version": 1,
+            "status": "passed_with_visual_check_pending",
+            "canonical_source": str(source),
+            "docx": str(docx),
+            "docx_is_derived": True,
+            "errors": [],
+        })
     if checkpoint and checkpoint.get("decision_file"):
         decision_path = workspace / render(checkpoint["decision_file"], question)
         decision_path.parent.mkdir(parents=True, exist_ok=True)
@@ -634,7 +711,8 @@ def smoke_test() -> dict[str, Any]:
         subprocess.run(["git", "commit", "-m", "seed"], cwd=workspace, capture_output=True, check=True)
         init_args = argparse.Namespace(
             profile="submission", questions="Q1", contest="CUMCM", paper_format="latex",
-            language="python", seed=2026, workflow_id="smoke", allow_no_git=False,
+            delivery_mode="latex_primary_docx_mirror", language="python", seed=2026,
+            workflow_id="smoke", allow_no_git=False,
         )
         cmd_init(workspace, init_args)
         run, template = load_runtime(workspace)
@@ -678,6 +756,10 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--questions", default="Q1")
     init.add_argument("--contest", default="CUMCM")
     init.add_argument("--paper-format", choices=("latex", "word", "markdown", "none"))
+    init.add_argument(
+        "--delivery-mode", choices=("single", "latex_primary_docx_mirror"),
+        help="single artifact or canonical LaTeX plus a derived DOCX mirror",
+    )
     init.add_argument("--language", choices=("auto", "python", "matlab"), default="auto")
     init.add_argument("--seed", type=int, default=2026)
     init.add_argument("--workflow-id", default="math-modeling-session")

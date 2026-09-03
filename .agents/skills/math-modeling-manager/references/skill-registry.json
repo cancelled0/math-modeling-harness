@@ -136,8 +136,8 @@
       "name": "latex-paper-zh",
       "category": "communication",
       "stage": "G5-G6",
-      "activation": "冻结后的中文 CUMCM LaTeX 组装、编译与 PDF 交付检查",
-      "outputs": ["paper/main.tex", "paper/main.pdf", "paper/latex_build_report.json", "paper/latex_delivery_check.json"],
+      "activation": "冻结后的中文 CUMCM LaTeX 组装、PDF 编译及可选的可追溯 DOCX 镜像交付",
+      "outputs": ["paper/main.tex", "paper/main.pdf", "paper/latex_build_report.json", "paper/latex_delivery_check.json", "paper/exports/main.docx", "paper/docx_export_report.json", "paper/docx_delivery_check.json"],
       "next_skills": ["consistency-auditor"]
     },
     {

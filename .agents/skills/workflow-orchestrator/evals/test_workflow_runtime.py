@@ -34,11 +34,25 @@ class WorkflowRuntimeTest(unittest.TestCase):
 
     def test_paper_and_language_variants(self) -> None:
         template = workflow.load_template("submission")
-        latex = workflow.applicable_steps(template, {"paper_format": "latex", "implementation_language": "python"})
-        word = workflow.applicable_steps(template, {"paper_format": "word", "implementation_language": "python"})
-        markdown = workflow.applicable_steps(template, {"paper_format": "markdown", "implementation_language": "python"})
-        matlab = workflow.applicable_steps(template, {"paper_format": "latex", "implementation_language": "matlab"})
-        self.assertIn("latex-build", {step["id"] for step in latex})
+        dual_latex = workflow.applicable_steps(template, {
+            "paper_format": "latex", "delivery_mode": "latex_primary_docx_mirror",
+            "implementation_language": "python",
+        })
+        single_latex = workflow.applicable_steps(template, {
+            "paper_format": "latex", "delivery_mode": "single", "implementation_language": "python",
+        })
+        word = workflow.applicable_steps(template, {
+            "paper_format": "word", "delivery_mode": "single", "implementation_language": "python",
+        })
+        markdown = workflow.applicable_steps(template, {
+            "paper_format": "markdown", "delivery_mode": "single", "implementation_language": "python",
+        })
+        matlab = workflow.applicable_steps(template, {
+            "paper_format": "latex", "delivery_mode": "single", "implementation_language": "matlab",
+        })
+        self.assertIn("latex-build", {step["id"] for step in dual_latex})
+        self.assertIn("docx-export", {step["id"] for step in dual_latex})
+        self.assertNotIn("docx-export", {step["id"] for step in single_latex})
         self.assertIn("word-build", {step["id"] for step in word})
         self.assertIn("markdown-build", {step["id"] for step in markdown})
         self.assertNotIn("latex-build", {step["id"] for step in word})
@@ -58,6 +72,7 @@ class WorkflowRuntimeTest(unittest.TestCase):
                     questions="Q1",
                     contest="CUMCM",
                     paper_format="latex",
+                    delivery_mode="latex_primary_docx_mirror",
                     language="python",
                     seed=2026,
                     workflow_id="rerun-test",
@@ -82,6 +97,7 @@ class WorkflowRuntimeTest(unittest.TestCase):
                     questions="Q1,Q2",
                     contest="CUMCM",
                     paper_format="none",
+                    delivery_mode="single",
                     language="auto",
                     seed=2026,
                     workflow_id="pause-test",
@@ -95,6 +111,26 @@ class WorkflowRuntimeTest(unittest.TestCase):
             resumed = workflow.cmd_next(workspace, argparse.Namespace(question=None))
             self.assertEqual(resumed["status"], "READY")
             self.assertEqual(resumed["question_id"], "Q1")
+
+    def test_docx_delivery_step_invalidates_when_tex_bundle_changes(self) -> None:
+        template = workflow.load_template("submission")
+        steps = workflow.applicable_steps(template, {
+            "paper_format": "latex",
+            "delivery_mode": "latex_primary_docx_mirror",
+            "implementation_language": "python",
+        })
+        step = next(item for item in steps if item["id"] == "docx-export")
+        with tempfile.TemporaryDirectory(prefix="workflow-docx-stale-") as temp:
+            workspace = Path(temp)
+            (workspace / "paper" / "sections").mkdir(parents=True)
+            (workspace / "paper" / "main.tex").write_text("main\n", encoding="utf-8")
+            section = workspace / "paper" / "sections" / "q1.tex"
+            section.write_text("version one\n", encoding="utf-8")
+            workflow.create_smoke_output(workspace, step, "Q1")
+            manifest = {"question_id": "Q1", "steps": {}}
+            self.assertTrue(workflow.step_complete(workspace, manifest, step))
+            section.write_text("version two\n", encoding="utf-8")
+            self.assertFalse(workflow.step_complete(workspace, manifest, step))
 
 
 if __name__ == "__main__":

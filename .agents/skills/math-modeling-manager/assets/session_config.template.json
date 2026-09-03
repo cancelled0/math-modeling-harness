@@ -17,6 +17,10 @@
   "paper_language": "zh-CN",
   "paper_format": "latex",
   "latex_engine": "xelatex",
+  "delivery_mode": "latex_primary_docx_mirror",
+  "canonical_paper_source": "paper/main.tex",
+  "docx_mirror": "paper/exports/main.docx",
+  "docx_reference_template": null,
   "paper_format_fallback": "word",
   "evidence_policy": {
     "academic_scan_before_method_discussion": true,

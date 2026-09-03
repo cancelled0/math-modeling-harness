@@ -5,6 +5,7 @@
     "contest_profile": "CUMCM",
     "paper_language": "zh-CN",
     "paper_format": "latex",
+    "delivery_mode": "latex_primary_docx_mirror",
     "implementation_language": "auto",
     "requires_academic_evidence_scan": true
   },
@@ -163,7 +164,20 @@
       "artifact_key": "paper_pdf",
       "checks": ["artifact_check", "reference_check", "delivery_check"],
       "gate_after": "G5",
-      "paper_formats": ["latex"]
+      "paper_formats": ["latex"],
+      "delivery_artifact": true
+    },
+    {
+      "id": "docx-export",
+      "skill": "latex-paper-zh",
+      "outputs": ["paper/exports/main.docx", "paper/docx_export_report.json", "paper/docx_delivery_check.json"],
+      "artifact_key": "paper_docx_mirror",
+      "checks": ["artifact_check", "docx_delivery_check"],
+      "gate_after": "G5",
+      "paper_formats": ["latex"],
+      "delivery_modes": ["latex_primary_docx_mirror"],
+      "delivery_artifact": true,
+      "external_capabilities": ["documents", "docx-render-verification"]
     },
     {
       "id": "word-build",
@@ -173,6 +187,7 @@
       "checks": ["artifact_check", "delivery_check"],
       "gate_after": "G5",
       "paper_formats": ["word"],
+      "delivery_artifact": true,
       "external_capabilities": ["documents", "pdf-render-verification"]
     },
     {
@@ -183,6 +198,7 @@
       "checks": ["artifact_check", "delivery_check"],
       "gate_after": "G5",
       "paper_formats": ["markdown"],
+      "delivery_artifact": true,
       "external_capabilities": ["documents", "pdf-render-verification"]
     },
     {

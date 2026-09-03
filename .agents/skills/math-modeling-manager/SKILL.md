@@ -46,7 +46,7 @@ description: 统一调度数学建模竞赛任务，在自由思路讨论、局�
 - 数据路径：有本地附件先 `data-auditor-cleaner`；缺少外部证据或数据时先 `modeling-evidence-collector`；需要衍生预测量、指标体系或变量约简时进入 `feature-engineering`。
 - 代码路径：人工方法选择后 `git-experiment-manager` 建立实验上下文，再执行 `model-code-analyzer` → 语言生成器 → `code-reviewer`。
 - 评估路径：`result-report-generator` 先作问题归因，再按需进入 `feature-engineering`、专业方法 Skill、代码修复或 `robustness-checker`。
-- 论文路径：结果冻结后按流程生成解释、结果、图表、分节、引用和润色；中文 LaTeX 交给 `latex-paper-zh`，英文 LaTeX 交给 `latex-paper-en`，随后执行三层审计。
+- 论文路径：结果冻结后按流程生成解释、结果、图表、分节、引用和润色；中文默认由 `latex-paper-zh` 维护唯一 TeX 源、先编译 PDF、再派生并核对 DOCX 镜像，英文 LaTeX 交给 `latex-paper-en`，随后执行跨格式与三层审计。
 
 ## 会话配置
 

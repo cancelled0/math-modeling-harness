@@ -44,7 +44,7 @@ Do not hunt through raw experiment folders to invent a narrative.
 5. Mention the baseline and eliminated alternatives only when they explain a real decision.
 6. Use only Type 2–4 figures as appropriate; never place Type 1 diagnostics in the paper.
 7. Save `paper/sections/qx.tex` or the requested Markdown section.
-8. For Chinese LaTeX delivery, hand off frozen, verified sections to `latex-paper-zh`; for explicit English LaTeX, use `latex-paper-en`. When session configuration selects Word/Markdown, use the available document and PDF-render capabilities to assemble `paper/main.docx` or `paper/main.md` plus a verified PDF.
+8. For Chinese LaTeX delivery, hand off frozen, verified sections to `latex-paper-zh`; for explicit English LaTeX, use `latex-paper-en`. In `latex_primary_docx_mirror` mode, do not author a second Word manuscript: compile and verify LaTeX first, then let `latex-paper-zh` derive the DOCX from the same canonical source. Only when session configuration explicitly selects Word/Markdown as the primary format should the available document and PDF-render capabilities assemble `paper/main.docx` or `paper/main.md` independently.
 
 # Human-Owned Content
 
