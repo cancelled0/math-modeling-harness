@@ -1,0 +1,11 @@
+{
+  "theme": "neutral",
+  "flowchart": {
+    "curve": "basis",
+    "htmlLabels": true,
+    "useMaxWidth": false
+  },
+  "themeVariables": {
+    "fontFamily": "Microsoft YaHei, Noto Sans CJK SC, sans-serif"
+  }
+}
