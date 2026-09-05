@@ -333,6 +333,14 @@
       "next_skills": ["data-auditor-cleaner", "feature-engineering", "method-selector", "robustness-checker", "git-experiment-manager"]
     },
     {
+      "name": "modeling-results-presenter",
+      "category": "communication",
+      "stage": "G3-G4",
+      "activation": "计算、代码审查和鲁棒性分析完成后，需要按优秀论文求解过程展示假设、准备、推导、模型、算法、结果文件和结论，供用户判断",
+      "outputs": ["results/Qx/experiments/roundN/presentation.json", "results/Qx/experiments/roundN/presentation.md"],
+      "next_skills": ["decision-prompt-builder", "final-method-explainer", "solution-package-builder"]
+    },
+    {
       "name": "robustness-checker",
       "category": "evaluation",
       "stage": "G4",
@@ -434,7 +442,7 @@
       "stage": "G0-G6",
       "activation": "运行文件型状态机，维护每问 manifest、暂停恢复、失效与一个下一动作",
       "outputs": ["planning/workflow_run.json", "planning/manifests/Qx.json", "planning/artifacts.json"],
-      "next_skills": ["problem-parser", "modeling-evidence-collector", "data-auditor-cleaner", "method-selector", "git-experiment-manager", "model-code-analyzer", "result-report-generator", "robustness-checker", "solution-package-builder", "latex-paper-zh", "quality-assurance-auditor"]
+      "next_skills": ["problem-parser", "modeling-evidence-collector", "data-auditor-cleaner", "method-selector", "git-experiment-manager", "model-code-analyzer", "result-report-generator", "robustness-checker", "modeling-results-presenter", "solution-package-builder", "latex-paper-zh", "quality-assurance-auditor"]
     }
   ]
 }

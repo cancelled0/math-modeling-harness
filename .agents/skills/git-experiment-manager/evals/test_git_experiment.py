@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -42,40 +43,58 @@ class GitExperimentTest(unittest.TestCase):
         )
         code = self.root / "code" / "Q1" / f"{algorithm}.py"
         code.parent.mkdir(parents=True, exist_ok=True)
-        code.write_text(f"VALUE = {value}\n", encoding="utf-8")
+        code.write_text("""import json, sys
+from pathlib import Path
+summary, value = sys.argv[1], float(sys.argv[2])
+path = Path(summary)
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    'schema_version': 1, 'status': 'PASSED', 'feasible': True,
+    'question_id': 'Q1', 'random_seed': 2026,
+    'comparison_contract': {'question_id': 'Q1', 'data_hash': 'data-1',
+        'split_hash': 'split-1', 'feature_spec_hash': 'features-1',
+        'metric_definition_hash': 'metric-1'},
+    'primary_metric': {'name': 'rmse', 'direction': 'minimize', 'value': value},
+    'methods': []
+}, indent=2))
+""", encoding="utf-8")
+        code_rel = code.relative_to(self.root).as_posix()
+        self.call(GIT_SCRIPT, "--workspace", str(self.root), "checkpoint", "--question", "Q1",
+                  "--message", f"exp(q1): implement {algorithm}", "--paths", code_rel)
         summary = self.root / "results" / "Q1" / "experiments" / round_name / "run_summary.json"
-        summary.parent.mkdir(parents=True, exist_ok=True)
-        summary.write_text(json.dumps({
-            "schema_version": 1,
-            "experiment_id": f"Q1-{algorithm}",
-            "question_id": "Q1",
-            "comparison_contract": {
-                "question_id": "Q1",
-                "data_hash": "data-1",
-                "split_hash": "split-1",
-                "feature_spec_hash": "features-1",
-                "metric_definition_hash": "metric-1"
-            },
-            "primary_metric": {"name": "rmse", "direction": "minimize", "value": value},
-            "methods": []
-        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        summary_rel = summary.relative_to(self.root).as_posix()
+        self.call(GIT_SCRIPT, "--workspace", str(self.root), "run", "--experiment-id", f"Q1-{algorithm}",
+                  "--summary", summary_rel, "--code-paths", code_rel, "--", sys.executable, code_rel,
+                  summary_rel, str(value))
         recorded = self.call(
             GIT_SCRIPT, "--workspace", str(self.root), "record",
             "--experiment-id", f"Q1-{algorithm}",
             "--summary", summary.relative_to(self.root).as_posix(),
-            "--message", f"exp(q1): implement {algorithm}",
-            "--paths", code.relative_to(self.root).as_posix(),
+            "--message", f"evidence(q1): record {algorithm}",
         )
         self.assertTrue(recorded["code_commit"])
-        self.assertEqual(json.loads(summary.read_text(encoding="utf-8"))["git"]["code_commit"], recorded["code_commit"])
+        self.assertEqual(json.loads(summary.read_text(encoding="utf-8"))["execution"]["code_commit"], recorded["code_commit"])
         return started["branch"], summary
+
+    def add_decision(self, summary: Path, choice: str) -> None:
+        relative = summary.relative_to(self.root).as_posix()
+        decision = self.root / "methods/Q1/q1_decisions.jsonl"
+        decision.parent.mkdir(parents=True, exist_ok=True)
+        decision.write_text(json.dumps({
+            "schema_version": 1, "decision_id": f"q1_{choice}_{summary.parent.name}",
+            "decision_type": "result_verdict", "status": "DECIDED", "decided_by": "human",
+            "choice": choice, "user_message": f"test user chooses {choice}", "experiment_id": json.loads(summary.read_text(encoding="utf-8"))["experiment_id"],
+            "evidence_hashes": {relative: hashlib.sha256(summary.read_bytes()).hexdigest()},
+            "decided_at": "2026-01-01T00:00:00+00:00"
+        }) + "\n", encoding="utf-8")
 
     def test_record_compare_reject_and_accept(self) -> None:
         rejected_branch, left = self.make_experiment("model-a", "round1", 2.0)
+        self.add_decision(left, "reject")
         left_relative = left.relative_to(self.root).as_posix()
         rejected = self.call(
             GIT_SCRIPT, "--workspace", str(self.root), "reject",
-            "--branch", rejected_branch, "--decision-id", "q1_reject_a",
+            "--branch", rejected_branch, "--decision-id", "q1_reject_round1",
         )
         self.assertEqual(rejected["returned_to"], "main")
         branches = subprocess.run(["git", "branch", "--list", rejected_branch], cwd=self.root, text=True, capture_output=True, check=True).stdout
@@ -90,6 +109,7 @@ class GitExperimentTest(unittest.TestCase):
             left_snapshot.write_text(left_text, encoding="utf-8")
 
             accepted_branch, right = self.make_experiment("model-b", "round2", 1.5)
+            self.add_decision(right, "accept")
             comparison = self.call(COMPARE_SCRIPT, str(left_snapshot), str(right))
             self.assertTrue(comparison["comparable"])
             self.assertEqual(comparison["winner"], "right")
@@ -103,7 +123,7 @@ class GitExperimentTest(unittest.TestCase):
 
             accepted = self.call(
                 GIT_SCRIPT, "--workspace", str(self.root), "accept",
-                "--branch", accepted_branch, "--decision-id", "q1_accept_b",
+                "--branch", accepted_branch, "--decision-id", "q1_accept_round2",
             )
             self.assertEqual(accepted["base"], "main")
             current = subprocess.run(["git", "branch", "--show-current"], cwd=self.root, text=True, capture_output=True, check=True).stdout.strip()
@@ -169,6 +189,32 @@ class GitExperimentTest(unittest.TestCase):
         )
         self.assertEqual(result["status"], "FAILED")
         self.assertIn("expected an exp/ branch", result["error"])
+
+    def test_compare_rejects_failed_and_nonfinite_runs(self) -> None:
+        contract = {
+            "question_id": "Q1", "data_hash": "d", "split_hash": "s",
+            "feature_spec_hash": "f", "metric_definition_hash": "m"
+        }
+        left = {"experiment_id": "left", "status": "PASSED", "feasible": True,
+                "execution": {"code_commit": "abc"}, "comparison_contract": contract,
+                "primary_metric": {"name": "rmse", "direction": "minimize", "value": 1.0}}
+        right = json.loads(json.dumps(left))
+        right.update(experiment_id="right", status="FAILED", feasible=False)
+        right["primary_metric"]["value"] = 0.1
+        left_path = self.root / "left.json"
+        right_path = self.root / "right.json"
+        left_path.write_text(json.dumps(left), encoding="utf-8")
+        right_path.write_text(json.dumps(right), encoding="utf-8")
+        result = self.call(COMPARE_SCRIPT, str(left_path), str(right_path), expected=2)
+        self.assertFalse(result["comparable"])
+        self.assertIsNone(result["winner"])
+
+        right["status"] = "PASSED"
+        right["feasible"] = True
+        right["primary_metric"]["value"] = float("nan")
+        right_path.write_text(json.dumps(right, allow_nan=True), encoding="utf-8")
+        result = self.call(COMPARE_SCRIPT, str(left_path), str(right_path), expected=1)
+        self.assertEqual(result["status"], "FAILED")
 
 
 if __name__ == "__main__":

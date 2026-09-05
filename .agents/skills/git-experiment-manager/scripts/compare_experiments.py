@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -37,19 +38,21 @@ def primary_metric(summary: dict[str, Any]) -> dict[str, Any] | None:
     if isinstance(value, dict) and {"name", "value", "direction"} <= set(value):
         if value["direction"] not in {"minimize", "maximize"}:
             raise ValueError("primary_metric.direction must be minimize or maximize")
-        if not isinstance(value["value"], (int, float)):
-            raise ValueError("primary_metric.value must be numeric")
+        if isinstance(value["value"], bool) or not isinstance(value["value"], (int, float)) or not math.isfinite(value["value"]):
+            raise ValueError("primary_metric.value must be a finite number")
         return value
     return None
 
 
-def compare(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+def compare(left: dict[str, Any], right: dict[str, Any], mode: str = "algorithm", min_improvement: float = 0.0) -> dict[str, Any]:
+    if mode not in {"algorithm", "pipeline"} or not math.isfinite(min_improvement) or min_improvement < 0:
+        raise ValueError("invalid comparison mode or minimum improvement")
     left_contract = contract(left)
     right_contract = contract(right)
     mismatches = {
         key: {"left": left_contract[key], "right": right_contract[key]}
         for key in CONTRACT_KEYS
-        if not left_contract[key] or left_contract[key] != right_contract[key]
+        if (mode != "pipeline" or key != "feature_spec_hash") and (not left_contract[key] or left_contract[key] != right_contract[key])
     }
     result: dict[str, Any] = {
         "schema_version": 1,
@@ -60,8 +63,22 @@ def compare(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
         "winner": None,
         "primary_metric_delta_right_minus_left": None,
         "warnings": [],
+        "mode": mode,
+        "acceptance": "human_required",
     }
-    if mismatches:
+    for name, summary in (("left", left), ("right", right)):
+        if summary.get("status") not in {"PASSED", "passed", "success"} or summary.get("feasible") is False:
+            result["contract_mismatches"][name + "_run_status"] = "failed, unknown, or infeasible"
+        if not summary.get("execution", {}).get("code_commit"):
+            result["contract_mismatches"][name + "_provenance"] = "missing executed commit"
+    if mode == "pipeline":
+        for key in ("target_hash", "evaluation_rows_hash", "population_hash"):
+            a = left.get("comparison_contract", {}).get(key)
+            b = right.get("comparison_contract", {}).get(key)
+            if not a or a != b:
+                result["contract_mismatches"][key] = {"left": a, "right": b}
+    result["comparable"] = not result["contract_mismatches"]
+    if not result["comparable"]:
         result["warnings"].append("比较契约不一致，禁止据此宣称某算法更优。")
         return result
 
@@ -81,12 +98,14 @@ def compare(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
 
     delta = float(right_metric["value"]) - float(left_metric["value"])
     result["primary_metric_delta_right_minus_left"] = delta
-    if delta == 0:
+    if abs(delta) <= min_improvement:
         result["winner"] = "tie"
     elif right_metric["direction"] == "minimize":
         result["winner"] = "right" if delta < 0 else "left"
     else:
         result["winner"] = "right" if delta > 0 else "left"
+    result["warnings"].append("winner 仅表示当前主指标方向；接受方案还需结合不确定性、稳定性、约束和计算成本。")
+    result["secondary_evidence"] = {name: {k: run.get(k) for k in ("uncertainty", "random_seed", "environment", "runtime_seconds", "scientific_checks")} for name, run in (("left", left), ("right", right))}
     return result
 
 
@@ -95,9 +114,11 @@ def main() -> int:
     parser.add_argument("left", type=Path)
     parser.add_argument("right", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--mode", choices=("algorithm", "pipeline"), default="algorithm")
+    parser.add_argument("--min-improvement", type=float, default=0.0)
     args = parser.parse_args()
     try:
-        result = compare(load_json(args.left), load_json(args.right))
+        result = compare(load_json(args.left), load_json(args.right), args.mode, args.min_improvement)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "FAILED", "error": str(exc)}, ensure_ascii=False, indent=2))
         return 1

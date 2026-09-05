@@ -8,6 +8,8 @@ import json
 import re
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from source_provenance import source_bundle, sha256
 
 
 FATAL_PATTERNS = {
@@ -43,6 +45,17 @@ def check(main_tex: Path) -> tuple[dict, int]:
 
     log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
     result["checks"]["log_exists"] = log.exists()
+    if not log.exists():
+        result["errors"].append("compiler log is missing")
+    if pdf.is_file() and not pdf.read_bytes().startswith(b"%PDF-"):
+        result["errors"].append("invalid PDF header")
+    build_path = main_tex.parent / "latex_build_report.json"
+    try:
+        build = json.loads(build_path.read_text(encoding="utf-8"))
+        if build.get("status") != "passed" or build.get("source_bundle_sha256") != source_bundle(main_tex.parent, main_tex)[0] or not pdf.is_file() or build.get("pdf_sha256") != sha256(pdf):
+            result["errors"].append("build report does not match current TeX/PDF")
+    except (OSError, ValueError):
+        result["errors"].append("valid build provenance is missing")
     for name, pattern in FATAL_PATTERNS.items():
         count = len(pattern.findall(log_text))
         result["checks"][name] = count

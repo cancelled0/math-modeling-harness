@@ -1,6 +1,6 @@
 ---
 name: model-assumptions-builder
-description: Extract and maintain global and method-specific mathematical-model assumptions from the problem frame, active method cards, data profile, and risk probes, while leaving necessity and impact judgments to the human modeler.
+description: 从题意、方法契约和数据中整理模型假设、符号、准备工作及推导，主动评价假设的必要性与影响，供建模、结果展示和论文使用。
 ---
 
 # Inputs
@@ -24,9 +24,9 @@ Read legacy candidate pools only during migration.
    - validation evidence;
    - mitigation or fallback link.
 4. Identify conflicts across Qx.
-5. Present unresolved necessity/impact trade-offs in one compact choice card where possible.
-6. Log human `assumption_necessity` decisions in `qx_decisions.jsonl`.
-7. Save `planning/model_assumptions.md`, transcribing settled human labels and impacts with decision IDs.
+5. Analyze necessity, impact and conflicts proactively. Ask only when a conflict changes framing, final method or claim scope; use the existing judgment point.
+6. Keep AI analysis distinct from actual user decisions; do not invent the user's rationale.
+7. Save per-question `methods/Qx/qx_foundations.json` with assumptions, symbols, preparation and derivations. Include concrete statements, units, sources, validation and scope. Global assumption/symbol summaries may be derived from these records.
 
 # Assumption Fields
 
@@ -43,8 +43,7 @@ Read legacy candidate pools only during migration.
 # Rules
 
 - Do not invent generic assumptions such as “data are accurate” unless they affect a real dependency.
-- Do not finalize necessary/simplifying or impact judgments for the human.
-- Do not leave many repeated sentinels in the final file; collect missing judgments through a choice card and stop finalization until answered.
+- Derive necessary/simplifying labels and impacts as evidence-backed analysis; user approval of model/claims governs final adoption.
 - Revisit an assumption only when its method, evidence, or downstream use materially changes.
 
 # Verification

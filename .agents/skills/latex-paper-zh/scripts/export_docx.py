@@ -76,23 +76,11 @@ def file_record(path: Path | None) -> dict[str, Any] | None:
     return {"path": str(path), "sha256": sha256(path)}
 
 
-def source_bundle(root: Path, main: Path) -> tuple[str, list[dict[str, str]]]:
-    records: list[dict[str, str]] = []
-    generated_pdf = main.with_suffix(".pdf")
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES or path == generated_pdf:
-            continue
-        relative = path.relative_to(root).as_posix()
-        if relative.startswith("exports/"):
-            continue
-        records.append({"path": relative, "sha256": sha256(path)})
-    digest = hashlib.sha256()
-    for item in records:
-        digest.update(item["path"].encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(item["sha256"].encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest(), records
+def source_bundle(root: Path, main: Path):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from source_provenance import source_bundle as shared_bundle
+    return shared_bundle(root, main)
 
 
 def export(args: argparse.Namespace) -> tuple[dict[str, Any], int]:

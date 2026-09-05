@@ -7,121 +7,308 @@
     "paper_format": "none",
     "delivery_mode": "single",
     "implementation_language": "auto",
-    "requires_academic_evidence_scan": false
+    "requires_academic_evidence_scan": false,
+    "research_budget_minutes": 30,
+    "paper_reserve_minutes": 180,
+    "feature_engineering": false,
+    "question_dependencies": {}
   },
   "human_checkpoints": [
-    {"reason": "material_framing_ambiguity", "policy": "never_auto_approve", "trigger": "conditional"},
-    {"reason": "final_method_choice", "policy": "never_auto_approve", "trigger": "method-choice"},
-    {"reason": "result_accept_adjust_or_fallback", "policy": "never_auto_approve", "trigger": "result-verdict"},
-    {"reason": "number_freeze_and_claim_scope", "policy": "never_auto_approve", "trigger": "conditional"}
+    {
+      "reason": "material_framing_ambiguity",
+      "policy": "never_auto_approve",
+      "trigger": "conditional"
+    },
+    {
+      "reason": "final_method_choice",
+      "policy": "never_auto_approve",
+      "trigger": "method-choice"
+    },
+    {
+      "reason": "result_accept_adjust_or_fallback",
+      "policy": "never_auto_approve",
+      "trigger": "result-verdict"
+    },
+    {
+      "reason": "number_freeze_and_claim_scope",
+      "policy": "never_auto_approve",
+      "trigger": "conditional"
+    }
   ],
   "steps": [
     {
       "id": "problem-parse",
       "skill": "problem-parser",
-      "outputs": ["planning/parse/problem_parse.json"],
+      "outputs": [
+        "planning/parse/problem_parse.json"
+      ],
       "artifact_key": "problem_parse",
-      "checks": ["artifact_check"],
-      "gate_after": "G0"
+      "checks": [
+        "artifact_check"
+      ],
+      "gate_after": "G0",
+      "scope": "global"
+    },
+    {
+      "id": "framing-check",
+      "skill": "decision-prompt-builder",
+      "outputs": [
+        "planning/parse/problem_parse.json"
+      ],
+      "checks": [
+        "artifact_check"
+      ],
+      "gate_after": "G0",
+      "scope": "global",
+      "checkpoint": {
+        "reason": "material_framing_ambiguity",
+        "policy": "never_auto_approve",
+        "decision_type": "framing_choice",
+        "decision_file": "planning/framing_decisions.jsonl",
+        "choices": [
+          "accept"
+        ],
+        "conditional_field": "material_ambiguities"
+      }
     },
     {
       "id": "problem-classify",
       "skill": "problem-classifier",
-      "outputs": ["planning/classification/problem_classification.json"],
+      "outputs": [
+        "planning/classification/problem_classification.json"
+      ],
       "artifact_key": "problem_classification",
-      "checks": ["artifact_check"],
-      "gate_after": "G0"
+      "checks": [
+        "artifact_check"
+      ],
+      "gate_after": "G0",
+      "scope": "global"
     },
     {
       "id": "data-audit",
       "skill": "data-auditor-cleaner",
-      "outputs": ["workspace/data/data_profile.json"],
+      "outputs": [
+        "workspace/data/data_profile.json",
+        "workspace/data/source_registry.json"
+      ],
       "artifact_key": "data_profile",
-      "checks": ["artifact_check"],
-      "gate_after": "G1"
+      "checks": [
+        "artifact_check",
+        "data_ingest_check"
+      ],
+      "gate_after": "G1",
+      "scope": "global"
+    },
+    {
+      "id": "feature-engineering",
+      "skill": "feature-engineering",
+      "outputs": [
+        "workspace/features/{question}/{question_lower}_feature_spec.json",
+        "workspace/features/{question}/{question_lower}_feature_audit.json"
+      ],
+      "checks": [
+        "artifact_check"
+      ],
+      "gate_after": "G1",
+      "optional_config": "feature_engineering"
     },
     {
       "id": "method-screen",
       "skill": "method-selector",
-      "outputs": ["methods/{question}/{question_lower}_method_card.md", "methods/{question}/probes/risk_probe_summary.json"],
+      "outputs": [
+        "methods/{question}/{question_lower}_method_card.md",
+        "methods/{question}/probes/risk_probe_summary.json",
+        "methods/{question}/method_contract.json"
+      ],
       "artifact_key": "method_card",
-      "checks": ["artifact_check", "baseline_check"],
+      "checks": [
+        "artifact_check",
+        "method_contract_check"
+      ],
       "gate_after": "G2"
     },
     {
       "id": "method-choice",
       "skill": "decision-prompt-builder",
-      "outputs": ["methods/{question}/{question_lower}_decisions.jsonl"],
+      "outputs": [
+        "methods/{question}/{question_lower}_decisions.jsonl"
+      ],
       "artifact_key": "decision_ledger",
-      "checks": ["human_decision_check"],
+      "checks": [
+        "human_decision_check"
+      ],
       "gate_after": "G2.5",
-      "checkpoint": {"reason": "final_method_choice", "policy": "never_auto_approve", "decision_type": "method_choice"}
+      "checkpoint": {
+        "reason": "final_method_choice",
+        "policy": "never_auto_approve",
+        "decision_type": "method_choice",
+        "choices": [
+          "accept"
+        ]
+      }
     },
     {
       "id": "git-experiment",
       "skill": "git-experiment-manager",
-      "outputs": ["planning/experiments/{question}/active_experiment.json"],
+      "outputs": [
+        "planning/experiments/{question}/active_experiment.json"
+      ],
       "artifact_key": "experiment_context",
-      "checks": ["git_context_check"],
+      "checks": [
+        "git_context_check"
+      ],
+      "gate_after": "G2.5"
+    },
+    {
+      "id": "model-foundations",
+      "skill": "model-assumptions-builder",
+      "outputs": [
+        "methods/{question}/{question_lower}_foundations.json"
+      ],
+      "checks": [
+        "artifact_check"
+      ],
       "gate_after": "G2.5"
     },
     {
       "id": "code-plan",
       "skill": "model-code-analyzer",
-      "outputs": ["code/{question}/{question_lower}_code_plan.md"],
+      "outputs": [
+        "code/{question}/{question_lower}_code_plan.md"
+      ],
       "artifact_key": "code_plan",
-      "checks": ["artifact_check"],
+      "checks": [
+        "artifact_check"
+      ],
       "gate_after": "G2.5",
       "language_variants": {
-        "matlab": {"outputs": ["code/matlab/{question}/{question_lower}_code_plan.md"]}
-      }
+        "matlab": {
+          "outputs": [
+            "code/matlab/{question}/{question_lower}_code_plan.md"
+          ]
+        }
+      },
+      "inputs": [
+        "methods/{question}/method_contract.json",
+        "methods/{question}/{question_lower}_foundations.json",
+        "workspace/data/data_profile.json"
+      ]
     },
     {
       "id": "model-run",
       "skill": "python-model-code-generator",
-      "outputs": ["results/{question}/experiments/round1/run_summary.json"],
+      "outputs": [
+        "results/{question}/experiments/{experiment_id}/run_summary.json"
+      ],
       "artifact_key": "latest_run",
-      "checks": ["artifact_check", "baseline_check", "modeling_coverage_check"],
+      "checks": [
+        "artifact_check",
+        "baseline_check",
+        "modeling_coverage_check",
+        "scientific_check"
+      ],
       "gate_after": "G2.5",
       "language_variants": {
-        "matlab": {"skill": "matlab-model-code-generator"}
+        "matlab": {
+          "skill": "matlab-model-code-generator"
+        }
       }
     },
     {
       "id": "code-review",
       "skill": "code-reviewer",
-      "outputs": ["code/{question}/reviews/{question_lower}_python_review.json"],
+      "outputs": [
+        "code/{question}/reviews/{question_lower}_python_review.json"
+      ],
       "artifact_key": "code_review",
-      "checks": ["artifact_check", "leakage_check"],
+      "checks": [
+        "artifact_check",
+        "leakage_check"
+      ],
       "gate_after": "G3",
       "language_variants": {
-        "matlab": {"outputs": ["code/matlab/{question}/reviews/{question_lower}_matlab_review.json"]}
-      }
+        "matlab": {
+          "outputs": [
+            "code/matlab/{question}/reviews/{question_lower}_matlab_review.json"
+          ]
+        }
+      },
+      "inputs": [
+        "results/{question}/experiments/{experiment_id}/run_summary.json"
+      ]
     },
     {
       "id": "result-report",
       "skill": "result-report-generator",
-      "outputs": ["results/{question}/reports/{question_lower}_final_result_analysis.md"],
+      "outputs": [
+        "results/{question}/reports/{question_lower}_final_result_analysis.md"
+      ],
       "artifact_key": "result_analysis",
-      "checks": ["artifact_check", "baseline_check"],
-      "gate_after": "G3"
-    },
-    {
-      "id": "result-verdict",
-      "skill": "decision-prompt-builder",
-      "outputs": ["methods/{question}/{question_lower}_decisions.jsonl"],
-      "artifact_key": "decision_ledger",
-      "checks": ["human_decision_check"],
+      "checks": [
+        "artifact_check",
+        "baseline_check"
+      ],
       "gate_after": "G3",
-      "checkpoint": {"reason": "result_accept_adjust_or_fallback", "policy": "never_auto_approve", "decision_type": "result_verdict"}
+      "inputs": [
+        "results/{question}/experiments/{experiment_id}/run_summary.json"
+      ]
     },
     {
       "id": "robustness",
       "skill": "robustness-checker",
-      "outputs": ["robustness/{question}/{question_lower}_robustness_summary.json"],
+      "outputs": [
+        "robustness/{question}/{question_lower}_robustness_summary.json"
+      ],
       "artifact_key": "robustness_summary",
-      "checks": ["artifact_check"],
-      "gate_after": "G4"
+      "checks": [
+        "artifact_check"
+      ],
+      "gate_after": "G4",
+      "inputs": [
+        "results/{question}/experiments/{experiment_id}/run_summary.json"
+      ]
+    },
+    {
+      "id": "results-presentation",
+      "skill": "modeling-results-presenter",
+      "outputs": [
+        "results/{question}/experiments/{experiment_id}/presentation.json",
+        "results/{question}/experiments/{experiment_id}/presentation.md"
+      ],
+      "checks": [
+        "artifact_check",
+        "presentation_check"
+      ],
+      "gate_after": "G3",
+      "inputs": [
+        "methods/{question}/{question_lower}_foundations.json",
+        "results/{question}/experiments/{experiment_id}/run_summary.json",
+        "robustness/{question}/{question_lower}_robustness_summary.json"
+      ]
+    },
+    {
+      "id": "result-verdict",
+      "skill": "decision-prompt-builder",
+      "outputs": [
+        "methods/{question}/{question_lower}_decisions.jsonl"
+      ],
+      "artifact_key": "decision_ledger",
+      "checks": [
+        "human_decision_check"
+      ],
+      "gate_after": "G3",
+      "checkpoint": {
+        "reason": "result_accept_adjust_or_fallback",
+        "policy": "never_auto_approve",
+        "decision_type": "result_verdict",
+        "choices": [
+          "accept",
+          "reject",
+          "adjust",
+          "fallback"
+        ]
+      }
     }
-  ]
+  ],
+  "runtime_revision": 2
 }

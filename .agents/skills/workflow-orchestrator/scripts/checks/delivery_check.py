@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from _common import emit, load_object, report
@@ -18,6 +19,12 @@ def main() -> int:
     warnings: list[str] = []
     checks = {"paper_root": str(root), "format": args.format}
     if args.format == "latex":
+        shared = Path(__file__).resolve().parents[3] / "latex-paper-zh/scripts"
+        sys.path.insert(0, str(shared))
+        from check_latex_delivery import check
+        actual, code = check(root / "main.tex")
+        if code:
+            errors.extend(actual["errors"])
         required = [root / "main.tex", root / "main.pdf", root / "latex_build_report.json", root / "latex_delivery_check.json"]
         for path in required:
             checks[path.name] = path.exists() and path.stat().st_size > 0

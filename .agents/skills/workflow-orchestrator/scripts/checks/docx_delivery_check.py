@@ -15,22 +15,11 @@ SOURCE_SUFFIXES = {".tex", ".bib", ".cls", ".sty", ".png", ".jpg", ".jpeg", ".pd
 
 
 def source_bundle(root: Path, main: Path) -> str:
-    records: list[tuple[str, str]] = []
-    generated_pdf = main.with_suffix(".pdf")
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES or path == generated_pdf:
-            continue
-        relative = path.relative_to(root).as_posix()
-        if relative.startswith("exports/"):
-            continue
-        records.append((relative, sha256(path)))
-    digest = hashlib.sha256()
-    for relative, file_hash in records:
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(file_hash.encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest()
+    import sys
+    shared = Path(__file__).resolve().parents[3] / "latex-paper-zh/scripts"
+    sys.path.insert(0, str(shared))
+    from source_provenance import source_bundle as bundle
+    return bundle(root, main)[0]
 
 
 def main() -> int:

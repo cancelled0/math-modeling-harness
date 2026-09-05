@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import os
+import platform
+import time
 import re
 import subprocess
 import sys
@@ -46,7 +50,9 @@ def head(root: Path) -> str:
 
 
 def require_clean(root: Path) -> None:
-    dirty = run_git(root, "status", "--porcelain").stdout.strip()
+    # Unrelated untracked files do not belong to an experiment. Git itself rejects
+    # a switch that would overwrite one; never add them to make the tree clean.
+    dirty = run_git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip()
     if dirty:
         raise RuntimeError("working tree is not clean; classify or commit the existing changes first")
 
@@ -92,6 +98,10 @@ def commit_paths(root: Path, paths: list[str], message: str) -> str:
     rels = list(dict.fromkeys(relative_path(root, item) for item in paths))
     for rel in rels:
         candidate = root / rel
+        if {"data_raw", ".venv", "venv", "__pycache__", "node_modules"}.intersection(Path(rel).parts):
+            raise ValueError(f"raw data/cache/environment must not be committed: {rel}")
+        if candidate.is_file() and candidate.stat().st_size > 20 * 1024 * 1024:
+            raise ValueError(f"large artifact requires path/hash registration: {rel}")
         tracked = run_git(root, "ls-files", "--error-unmatch", "--", rel, check=False).returncode == 0
         if not candidate.is_file() and not tracked:
             raise ValueError(f"explicit commit path is neither a file nor a tracked deletion: {rel}")
@@ -125,12 +135,20 @@ def cmd_checkpoint(root: Path, args: argparse.Namespace) -> dict[str, Any]:
 
 def cmd_start(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
-    require_clean(root)
-    run_git(root, "switch", args.base)
     name = f"exp/{slug(args.contest)}/{slug(args.question)}/{slug(args.algorithm)}"
     if run_git(root, "show-ref", "--verify", f"refs/heads/{name}", check=False).returncode == 0:
         raise RuntimeError(f"experiment branch already exists: {name}")
-    run_git(root, "switch", "-c", name)
+    target = getattr(args, "worktree", None)
+    if target:
+        target = Path(target).resolve()
+        if target.exists():
+            raise ValueError("worktree destination already exists")
+        run_git(root, "worktree", "add", "-b", name, str(target), args.base)
+        root = target
+    else:
+        require_clean(root)
+        run_git(root, "switch", args.base)
+        run_git(root, "switch", "-c", name)
     context = {
         "schema_version": 1,
         "status": "active",
@@ -141,6 +159,7 @@ def cmd_start(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         "base_branch": args.base,
         "parent_commit": head(root),
         "started_at": now(),
+        "workspace": str(root),
     }
     context_path = root / "planning" / "experiments" / args.question.upper() / "active_experiment.json"
     context_path.parent.mkdir(parents=True, exist_ok=True)
@@ -155,15 +174,21 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     if not summary_path.exists():
         raise FileNotFoundError(summary_path)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    parent = head(root)
-    code_commit = commit_paths(root, args.paths, args.message)
-    summary["experiment_id"] = args.experiment_id
-    summary["git"] = {
-        "branch": branch(root),
-        "parent_commit": parent,
-        "code_commit": code_commit,
-    }
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    execution = summary.get("execution", {})
+    receipt_path = root / relative_path(root, execution.get("receipt_file", ""))
+    if not receipt_path.is_file():
+        raise ValueError("run through the run command before record; missing execution receipt")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    code_commit = execution.get("code_commit")
+    if not code_commit or receipt.get("code_commit") != code_commit or receipt.get("exit_code") != 0:
+        raise ValueError("invalid execution receipt")
+    if summary.get("experiment_id") != args.experiment_id or receipt.get("experiment_id") != args.experiment_id:
+        raise ValueError("experiment ID mismatch")
+    for raw, expected in receipt.get("files", {}).items():
+        path = root / relative_path(root, raw)
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            raise ValueError(f"executed input/output changed: {raw}")
+    run_git(root, "merge-base", "--is-ancestor", code_commit, "HEAD")
     registry = append_registry(root, {
         "schema_version": 1,
         "event": "experiment_recorded",
@@ -176,7 +201,9 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     })
     question_id = str(summary.get("question_id") or summary.get("question") or "").upper()
     context_path = root / "planning" / "experiments" / question_id / "active_experiment.json"
-    evidence_paths = [summary_path.relative_to(root).as_posix(), registry.relative_to(root).as_posix()]
+    evidence_paths = [summary_relative, receipt_path.relative_to(root).as_posix(), registry.relative_to(root).as_posix()]
+    evidence_paths.extend(receipt.get("output_files", []))
+    evidence_paths.extend(relative_path(root, p) for p in (args.paths or []))
     if context_path.exists():
         evidence_paths.append(context_path.relative_to(root).as_posix())
     evidence_commit = commit_paths(
@@ -193,10 +220,115 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def cmd_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
+    """Execute already committed code, capture actual environment and file hashes."""
+    ensure_repo(root)
+    command = list(args.argv)
+    if command and command[0] == "--":
+        command.pop(0)
+    if not command:
+        raise ValueError("missing executable argv after --")
+    code_commit = head(root)
+    code_files = [relative_path(root, p) for p in args.code_paths]
+    for raw in code_files:
+        run_git(root, "ls-files", "--error-unmatch", "--", raw)
+        if run_git(root, "diff", "HEAD", "--", raw).stdout:
+            raise ValueError(f"commit code before execution: {raw}")
+    input_files = [relative_path(root, p) for p in args.inputs]
+    before = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in code_files + input_files}
+    summary_relative = relative_path(root, args.summary)
+    summary_path = root / summary_relative
+    if summary_path.exists():
+        raise ValueError("run summary already exists; use a fresh experiment ID/directory")
+    started = now()
+    begin = time.monotonic()
+    proc = subprocess.run(command, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=args.timeout)
+    elapsed = time.monotonic() - begin
+    receipt_path = summary_path.with_name("execution_receipt.json")
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    log = summary_path.with_name("execution.log")
+    log.write_text(proc.stdout + "\n" + proc.stderr, encoding="utf-8")
+    receipt = {"schema_version": 1, "code_commit": code_commit, "experiment_id": args.experiment_id,
+               "argv": command, "started_at": started, "finished_at": now(), "exit_code": proc.returncode,
+               "files": before, "log": log.relative_to(root).as_posix()}
+    if proc.returncode or not summary_path.is_file():
+        receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+        raise RuntimeError(f"execution failed or no run summary; see {log}")
+    for raw, expected in before.items():
+        if hashlib.sha256((root / raw).read_bytes()).hexdigest() != expected:
+            raise RuntimeError(f"input/code changed during execution: {raw}")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["experiment_id"] = args.experiment_id
+    summary["execution"] = {"code_commit": code_commit, "receipt_file": receipt_path.relative_to(root).as_posix()}
+    summary["environment"] = {**summary.get("environment", {}), "runner_python": sys.version, "platform": platform.platform(), "argv": command,
+                              "runner_packages": subprocess.run([sys.executable, "-m", "pip", "freeze"], capture_output=True, text=True).stdout.splitlines()}
+    summary["runtime_seconds"] = elapsed
+    # The model program must record the seed it actually used, not an assumed CLI seed.
+    if "random_seed" not in summary:
+        raise ValueError("model program must report its actual random_seed")
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    output_files = [p for method in summary.get("methods", []) for p in method.get("output_files", [])]
+    for raw in [summary_relative, *output_files]:
+        rel = relative_path(root, raw)
+        receipt["files"][rel] = hashlib.sha256((root / rel).read_bytes()).hexdigest()
+    receipt["output_files"] = [summary_relative, *output_files, log.relative_to(root).as_posix()]
+    receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"status": "EXECUTED", "code_commit": code_commit, "receipt": str(receipt_path), "summary": summary_relative}
+
+
+def verify_decision(root, args, choice):
+    paths = [root / args.decision_file] if getattr(args, "decision_file", None) else list((root / "methods").rglob("*_decisions.jsonl"))
+    found = []
+    for path in paths:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                if row.get("decision_id") == args.decision_id:
+                    found.append((path, row))
+    if len(found) != 1:
+        raise ValueError("decision ID must resolve to exactly one real ledger record")
+    path, row = found[0]
+    if row.get("decided_by") != "human" or row.get("status") != "DECIDED" or row.get("choice") != choice or not row.get("user_message"):
+        raise ValueError("decision does not authorize this Git action")
+    hashes = row.get("evidence_hashes", {})
+    summaries = [p for p in hashes if p.endswith("run_summary.json")]
+    if not summaries or not row.get("experiment_id"):
+        raise ValueError("decision must bind an experiment and run summary")
+    for raw, expected in hashes.items():
+        if raw.endswith("/"):
+            continue
+        file = root / relative_path(root, raw)
+        if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != expected:
+            raise ValueError(f"decision evidence is stale: {raw}")
+    for raw in summaries:
+        summary = json.loads((root / raw).read_text(encoding="utf-8"))
+        if summary.get("experiment_id") != row["experiment_id"]:
+            raise ValueError("decision experiment mismatch")
+        commit = summary.get("execution", {}).get("code_commit")
+        if not commit or run_git(root, "merge-base", "--is-ancestor", commit, args.branch, check=False).returncode:
+            raise ValueError("experiment code is not on the target branch")
+    return path
+
+
+def checkpoint_generated_state(root, decision_file):
+    """Persist only named harness control records before a branch transition."""
+    names = ["planning/workflow_run.json", "planning/artifacts.json", "planning/events.jsonl", "planning/experiment_registry.jsonl"]
+    names.extend(p.relative_to(root).as_posix() for p in (root / "planning/manifests").glob("*.json"))
+    names.append(decision_file.relative_to(root).as_posix())
+    changed = []
+    for raw in names:
+        if (root / raw).is_file() and run_git(root, "status", "--porcelain", "--", raw).stdout.strip():
+            changed.append(raw)
+    if changed:
+        commit_paths(root, changed, "checkpoint: workflow evidence and human decision")
+
+
 def cmd_accept(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
-    require_clean(root)
     require_experiment_branch(args.branch, args.base)
+    decision_file = verify_decision(root, args, "accept")
+    checkpoint_generated_state(root, decision_file)
+    require_clean(root)
     run_git(root, "show-ref", "--verify", f"refs/heads/{args.branch}")
     run_git(root, "switch", args.base)
     run_git(root, "merge", "--no-ff", args.branch, "-m", f"accept: {args.branch} ({args.decision_id})")
@@ -214,8 +346,10 @@ def cmd_accept(root: Path, args: argparse.Namespace) -> dict[str, Any]:
 
 def cmd_reject(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
-    require_clean(root)
     require_experiment_branch(args.branch, args.base)
+    decision_file = verify_decision(root, args, "reject")
+    checkpoint_generated_state(root, decision_file)
+    require_clean(root)
     run_git(root, "switch", args.branch)
     registry = append_registry(root, {
         "schema_version": 1,
@@ -261,18 +395,28 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--question", required=True)
     start.add_argument("--algorithm", required=True)
     start.add_argument("--base", default="main")
+    start.add_argument("--worktree", type=Path, help="optional isolated checkout; existing checkout stays in place")
+
+    execute = sub.add_parser("run")
+    execute.add_argument("--experiment-id", required=True)
+    execute.add_argument("--summary", required=True)
+    execute.add_argument("--code-paths", nargs="+", required=True)
+    execute.add_argument("--inputs", nargs="*", default=[])
+    execute.add_argument("--timeout", type=int, default=600)
+    execute.add_argument("argv", nargs=argparse.REMAINDER)
 
     record = sub.add_parser("record")
     record.add_argument("--experiment-id", required=True)
     record.add_argument("--summary", required=True)
     record.add_argument("--message", required=True)
-    record.add_argument("--paths", nargs="+", required=True)
+    record.add_argument("--paths", nargs="*", default=[], help="additional explicit evidence files; code must already be committed")
 
     for name in ("accept", "reject"):
         action = sub.add_parser(name)
         action.add_argument("--branch", required=True)
         action.add_argument("--decision-id", required=True)
         action.add_argument("--base", default="main")
+        action.add_argument("--decision-file")
     return parser
 
 
@@ -284,6 +428,7 @@ def main() -> int:
         "checkpoint": cmd_checkpoint,
         "start": cmd_start,
         "record": cmd_record,
+        "run": cmd_run,
         "accept": cmd_accept,
         "reject": cmd_reject,
     }

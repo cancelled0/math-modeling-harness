@@ -22,8 +22,10 @@ def main() -> int:
         if not args.tex.exists():
             errors.append("TeX file does not exist")
         else:
-            text = args.tex.read_text(encoding="utf-8", errors="replace")
-            for group in re.findall(r"\\cite\w*\{([^}]+)\}", text):
+            sources = list(args.tex.rglob("*.tex")) if args.tex.is_dir() else [args.tex]
+            text = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in sources if "drafts" not in p.parts)
+            text = re.sub(r"(?<!\\)%[^\n]*", "", text)
+            for group in re.findall(r"\\cite\w*\*?(?:\[[^\]]*\])*\{([^}]+)\}", text):
                 citations.update(key.strip() for key in group.split(",") if key.strip())
     if args.bib:
         if not args.bib.exists():

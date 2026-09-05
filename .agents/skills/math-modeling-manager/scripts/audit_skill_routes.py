@@ -43,6 +43,9 @@ ORCHESTRATOR_REQUIRED = (
     "scripts/checks/reference_check.py",
     "scripts/checks/delivery_check.py",
     "scripts/checks/docx_delivery_check.py",
+    "scripts/contracts.py",
+    "scripts/smoke_case.py",
+    "references/runtime-contract.md",
 )
 
 LATEX_ZH_REQUIRED = (
@@ -54,7 +57,7 @@ LATEX_ZH_REQUIRED = (
     "evals/test_latex_tools.py",
 )
 
-BUILTIN_CHECKS = {"human_decision_check", "git_context_check"}
+BUILTIN_CHECKS = {"human_decision_check", "git_context_check", "evidence_check", "method_contract_check", "scientific_check", "presentation_check", "audit_check", "visual_check"}
 
 FORBIDDEN_SKILL_REFS = (
     "choosing-a-forecaster",

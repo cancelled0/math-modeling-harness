@@ -19,8 +19,8 @@ Use:
 
 - `qx_method_card.md`
 - `qx_decisions.jsonl`
-- `planning/model_assumptions.md`
-- `planning/symbol_table.md`
+- `methods/Qx/qx_foundations.json` (assumptions, symbols, preparation and derivations)
+- accepted experiment's `presentation.json` and `presentation.md`
 - `qx_code_plan.md`
 - final run summary and result analysis
 - robustness summary/report
@@ -47,7 +47,7 @@ Read legacy candidate and iteration logs only for migration.
 # Rules
 
 - Do not infer the chosen method from best metrics.
-- Do not invent the why-this-method narrative.
+- Explain the method rationale from evidence and the user's actual adoption; never invent human-authored reasons. AI-originated explanation is allowed within the accepted scope.
 - Do not create a new pending decision artifact.
 - Do not restate a long iteration diary; include only material eliminated alternatives and evidence.
 - Do not include unsupported numerical claims.

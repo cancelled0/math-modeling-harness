@@ -70,6 +70,7 @@
 | Skill | 何时使用 | 最低前置条件 | 主要输出 | 常见下一步 |
 |---|---|---|---|---|
 | `result-report-generator` | 有意义的实验轮、异常或最终结果需要判断 | run summary、方法卡、决定、可比基线 | 诊断分类、选择卡或最终结果分析 | 定向修复/`robustness-checker` |
+| `modeling-results-presenter` | 计算、审查和鲁棒性完成后，向用户展示每问的假设、准备、推导、模型、算法、结果文件、结论和局限 | foundations、run summary、robustness | `presentation.json`、`presentation.md` | 结果判断、最终方法解释 |
 | `robustness-checker` | 主方法/基线已运行，需要敏感性、消融、稳定性和误差检查 | 结果、方法风险、待验证声明 | robustness summary/report | 结果判断或写作包 |
 | `final-method-explainer` | submission 的最终实验轮已接受 | 最终方法、代码、假设、符号与决定 | `qx_final_method_explanation.md` | 写作包/论文 |
 

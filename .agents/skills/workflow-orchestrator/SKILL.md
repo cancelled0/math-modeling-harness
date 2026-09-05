@@ -5,6 +5,8 @@ description: 运行和检查数学建模工作区的文件型状态机，按子�
 
 # 数学建模状态机
 
+当前执行契约以 [Runtime revision 2](references/runtime-contract.md) 为准，正式工作先读取它。旧会话用 migrate 备份并重新验证。新增结果展示位于鲁棒性之后、结果判断之前。start/finish 执行检查并绑定依赖哈希，文件存在不会自动完成步骤。
+
 读取项目 `AGENTS.md`。纯思路讨论由 `modeling-thought-partner` 旁路本 Skill；正式任务才进入状态机。
 
 ## 运行入口

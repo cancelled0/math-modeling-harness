@@ -11,6 +11,8 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from source_provenance import source_bundle, sha256
 
 
 def locate(name: str) -> str | None:
@@ -98,6 +100,8 @@ def compile_tex(main: Path, engine: str, timeout: int) -> tuple[dict, int]:
         return report, 2
 
     report["engine"] = engine
+    source_hash, _ = source_bundle(main.parent, main)
+    previous_pdf_time = main.with_suffix(".pdf").stat().st_mtime_ns if main.with_suffix(".pdf").exists() else None
     if engine == "latexmk":
         commands = [[latexmk, "-xelatex", "-interaction=nonstopmode", "-halt-on-error", main.name]]
     else:
@@ -105,6 +109,16 @@ def compile_tex(main: Path, engine: str, timeout: int) -> tuple[dict, int]:
             [xelatex, "-interaction=nonstopmode", "-halt-on-error", main.name],
             [xelatex, "-interaction=nonstopmode", "-halt-on-error", main.name],
         ]
+        source_text = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in main.parent.rglob("*.tex"))
+        if "\\bibliography{" in source_text or "\\addbibresource" in source_text:
+            backend = "biber" if "\\addbibresource" in source_text and "backend=bibtex" not in source_text else "bibtex"
+            executable = locate(backend)
+            if not operational(executable):
+                report["status"] = "unavailable"
+                report["errors"].append(f"bibliography requires operational {backend}")
+                return report, 2
+            commands.insert(1, [executable, main.stem])
+            commands.append([xelatex, "-interaction=nonstopmode", "-halt-on-error", main.name])
 
     for command in commands:
         try:
@@ -140,6 +154,11 @@ def compile_tex(main: Path, engine: str, timeout: int) -> tuple[dict, int]:
     if not pdf.exists() or pdf.stat().st_size == 0:
         report["errors"].append("compiler returned success but PDF is missing or empty")
         return report, 1
+    if source_bundle(main.parent, main)[0] != source_hash or pdf.stat().st_mtime_ns == previous_pdf_time:
+        report["errors"].append("source changed during compilation or PDF was not rebuilt")
+        return report, 1
+    report["source_bundle_sha256"] = source_hash
+    report["pdf_sha256"] = sha256(pdf)
     report["status"] = "passed"
     report["completed_at"] = datetime.now(timezone.utc).isoformat()
     return report, 0

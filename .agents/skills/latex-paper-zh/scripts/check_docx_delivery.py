@@ -39,23 +39,11 @@ def load_object(path: Path) -> dict[str, Any]:
     return value
 
 
-def source_bundle(root: Path, main: Path) -> str:
-    records: list[tuple[str, str]] = []
-    generated_pdf = main.with_suffix(".pdf")
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES or path == generated_pdf:
-            continue
-        relative = path.relative_to(root).as_posix()
-        if relative.startswith("exports/"):
-            continue
-        records.append((relative, sha256(path)))
-    digest = hashlib.sha256()
-    for relative, file_hash in records:
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(file_hash.encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest()
+def source_bundle(root: Path, main: Path):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from source_provenance import source_bundle as shared_bundle
+    return shared_bundle(root, main)[0]
 
 
 def check(args: argparse.Namespace) -> tuple[dict[str, Any], int]:

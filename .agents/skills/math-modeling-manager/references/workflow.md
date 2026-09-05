@@ -59,6 +59,8 @@ submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：
 5. `robustness-checker` 执行消融、敏感性、扰动、重采样、误差与不确定性分析。
 6. 人工确认声明范围后由 `solution-package-builder` 生成写作包和 `frozen_numbers.json`。
 
+在结果判断之前，`modeling-results-presenter` 汇总假设、数据准备、关键推导、逐问模型与算法、结果文件、比较、局限和结论。报告状态为待审阅；用户先看到求解过程，再决定接受、调整、拒绝或启用备选。
+
 ## S6 论文、中文 LaTeX 与 G5
 
 1. 最终方法解释、结果分析、图表计划和验证图件齐全。

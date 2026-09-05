@@ -1,820 +1,616 @@
 #!/usr/bin/env python3
-"""File-backed runtime for the project mathematical-modeling workflow."""
-
+"""Evidence-bound workflow runtime; manifest schema remains 1."""
 from __future__ import annotations
-
 import argparse
+import copy
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
-import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 ASSET_DIR = SKILL_DIR / "assets"
 CHECK_DIR = SCRIPT_DIR / "checks"
-GATE_ORDER = {"G0": 0, "G1": 1, "G2": 2, "G2.5": 3, "G3": 4, "G4": 5, "G5": 6, "G6": 7}
-BUILTIN_CHECKS = {"human_decision_check", "git_context_check"}
-DELIVERY_SOURCE_SUFFIXES = {".tex", ".bib", ".cls", ".sty", ".png", ".jpg", ".jpeg", ".pdf", ".svg"}
+sys.path.insert(0, str(SCRIPT_DIR))
+import contracts as c
 
+GATE_ORDER = {"G0": 0, "G1": 1, "G2": 2, "G2.5": 3, "G3": 4, "G4": 5, "G5": 6, "G6": 7}
+RUNTIME_REVISION = 2
 
 class WorkflowError(RuntimeError):
     pass
 
-
-def now() -> str:
+def now():
     return datetime.now(timezone.utc).isoformat()
 
+def read_json(path):
+    return c.load(path)
 
-def parse_time(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def read_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"cannot read JSON {path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise WorkflowError(f"JSON root must be an object: {path}")
-    return value
-
-
-def write_json(path: Path, value: dict[str, Any]) -> None:
+def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     os.replace(temp, path)
 
-
-def append_jsonl(path: Path, value: dict[str, Any]) -> None:
+def append_jsonl(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(value, ensure_ascii=False) + "\n")
+    with path.open("a", encoding="utf-8") as out:
+        out.write(json.dumps(data, ensure_ascii=False, allow_nan=False) + "\n")
 
+def hash_value(data):
+    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
-def template_path(profile: str) -> Path:
-    name = "cumcm-submission.template.json" if profile == "submission" else "lean.template.json"
-    return ASSET_DIR / name
+def template_path(profile):
+    return ASSET_DIR / ("cumcm-submission.template.json" if profile == "submission" else "lean.template.json")
 
+def load_template(profile):
+    return read_json(template_path(profile))
 
-def load_template(profile: str) -> dict[str, Any]:
-    template = read_json(template_path(profile))
-    if template.get("profile") != profile:
-        raise WorkflowError(f"template profile mismatch: {template_path(profile)}")
-    return template
+def runtime_paths(root):
+    return {key: root / "planning" / name for key, name in {
+        "run": "workflow_run.json", "session": "session_config.json", "artifacts": "artifacts.json",
+        "events": "events.jsonl", "experiments": "experiment_registry.jsonl", "manifests": "manifests"}.items()}
 
-
-def runtime_paths(workspace: Path) -> dict[str, Path]:
-    planning = workspace / "planning"
-    return {
-        "run": planning / "workflow_run.json",
-        "session": planning / "session_config.json",
-        "artifacts": planning / "artifacts.json",
-        "events": planning / "events.jsonl",
-        "experiments": planning / "experiment_registry.jsonl",
-        "manifests": planning / "manifests",
-    }
-
-
-def manifest_path(workspace: Path, question: str) -> Path:
-    return runtime_paths(workspace)["manifests"] / f"{question}.json"
-
-
-def normalize_question(raw: str) -> str:
+def normalize_question(raw):
     value = raw.strip().upper()
-    if not re.fullmatch(r"Q[1-9][0-9]*", value):
+    if not re.fullmatch(r"Q[1-9][0-9]*|GLOBAL", value):
         raise WorkflowError(f"invalid question id: {raw}")
     return value
 
+def render(value, q):
+    return value.format(question=q, question_lower=q.lower())
 
-def render(value: str, question: str) -> str:
-    return value.format(question=question, question_lower=question.lower())
+def outputs_for(step, q):
+    return [render(p, q) for p in step.get("outputs", [])]
 
+def manifest_path(root, q):
+    return root / "planning/manifests" / f"{q}.json"
 
-def delivery_source_bundle(root: Path, main: Path) -> str:
-    records: list[tuple[str, str]] = []
-    generated_pdf = main.with_suffix(".pdf")
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in DELIVERY_SOURCE_SUFFIXES or path == generated_pdf:
-            continue
-        relative = path.relative_to(root).as_posix()
-        if relative.startswith("exports/"):
-            continue
-        records.append((relative, hashlib.sha256(path.read_bytes()).hexdigest()))
-    digest = hashlib.sha256()
-    for relative, file_hash in records:
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(file_hash.encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest()
+def initial_manifest(q, profile):
+    return {"schema_version": 1, "question_id": q, "rigor_profile": profile, "steps": {}, "artifacts": {}}
 
+def load_manifest(root, q):
+    return read_json(manifest_path(root, q))
 
-def applicable_steps(template: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
-    paper_format = config.get("paper_format", template.get("defaults", {}).get("paper_format"))
-    delivery_mode = config.get("delivery_mode", template.get("defaults", {}).get("delivery_mode", "single"))
-    language = config.get("implementation_language", "auto")
-    if language == "auto":
-        language = "python"
+def save_manifest(root, manifest):
+    write_json(manifest_path(root, manifest["question_id"]), manifest)
+
+def step_record(manifest, sid):
+    return manifest.setdefault("steps", {}).setdefault(sid, {"status": "pending"})
+
+def record_event(root, event, **fields):
+    append_jsonl(runtime_paths(root)["events"], {"schema_version": 1, "event": event, "recorded_at": now(), **fields})
+
+def git_context(root):
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=root, text=True, encoding="utf-8", errors="replace", capture_output=True)
+    try:
+        head = git("rev-parse", "HEAD")
+        if head.returncode:
+            return {"available": False}
+        return {"available": True, "commit": head.stdout.strip(), "branch": git("branch", "--show-current").stdout.strip(),
+                "dirty": bool(git("status", "--porcelain").stdout.strip())}
+    except OSError:
+        return {"available": False}
+
+def applicable_steps(template, config):
     result = []
-    for raw_step in template.get("steps", []):
-        step = dict(raw_step)
-        variant = raw_step.get("language_variants", {}).get(language)
-        if variant:
-            step.update(variant)
-        paper_variant = raw_step.get("paper_format_variants", {}).get(paper_format)
-        if paper_variant:
-            step.update(paper_variant)
-        formats = step.get("paper_formats")
-        if formats and paper_format not in formats:
+    for raw in template["steps"]:
+        step = copy.deepcopy(raw)
+        step.update(raw.get("language_variants", {}).get(config.get("implementation_language", "python"), {}))
+        step.update(raw.get("paper_format_variants", {}).get(config.get("paper_format"), {}))
+        if step.get("paper_formats") and config.get("paper_format") not in step["paper_formats"]:
             continue
-        delivery_modes = step.get("delivery_modes")
-        if delivery_modes and delivery_mode not in delivery_modes:
+        if step.get("delivery_modes") and config.get("delivery_mode", "single") not in step["delivery_modes"]:
             continue
+        if step.get("optional_config") and not config.get(step["optional_config"]):
+            continue
+        if step["id"] == "latex-build" and config.get("paper_language", "zh-CN").startswith("en"):
+            step["skill"] = "latex-paper-en"
         result.append(step)
     return result
 
+def load_runtime(root):
+    run = read_json(runtime_paths(root)["run"])
+    if run.get("runtime_revision") != RUNTIME_REVISION:
+        raise WorkflowError("legacy runtime: run migrate to preserve old manifests and revalidate evidence")
+    if hash_value(read_json(runtime_paths(root)["session"])) != run["session_hash"]:
+        raise WorkflowError("session configuration changed: run reconfigure")
+    return run, run["template_snapshot"]
 
-def outputs_for(step: dict[str, Any], question: str) -> list[str]:
-    return [render(item, question) for item in step.get("outputs", [])]
+def graph(root, run, template):
+    nodes, last = {}, {q: None for q in run["questions"]}
+    for base in applicable_steps(template, run["config"]):
+        owners = ["GLOBAL"] if base.get("scope") == "global" else run["questions"]
+        for q in owners:
+            step = copy.deepcopy(base)
+            step["question_id"] = q
+            if step.get("checkpoint", {}).get("conditional_field"):
+                parse = root / "planning/parse/problem_parse.json"
+                field = step["checkpoint"]["conditional_field"]
+                if not parse.is_file() or not read_json(parse).get(field):
+                    step.pop("checkpoint")
+            key = f"{q}:{step['id']}"
+            deps = set(filter(None, last.values())) if q == "GLOBAL" else ({last[q]} if last[q] else set())
+            deps.update(render(x, q) for x in step.get("depends_on", []))
+            if step["id"] == "method-screen":
+                deps.update(f"{up}:result-verdict" for up in run["config"].get("question_dependencies", {}).get(q, []))
+            iteration = run.get("iterations", {}).get(q, "round1")
+            for field in ("outputs", "inputs"):
+                step[field] = [render(x.replace("{experiment_id}", iteration), q) for x in step.get(field, [])]
+            step["run_summary"] = f"results/{q}/experiments/{iteration}/run_summary.json"
+            if step["id"] == "code-plan" and run["config"].get("feature_engineering"):
+                step["inputs"].extend([f"workspace/features/{q}/{q.lower()}_feature_spec.json", f"workspace/features/{q}/{q.lower()}_feature_audit.json"])
+            step["dependencies"] = sorted(deps)
+            nodes[key] = step
+        last = {q: f"GLOBAL:{base['id']}" if owners == ["GLOBAL"] else f"{q}:{base['id']}" for q in last}
+    ordered, remaining = {}, dict(nodes)
+    while remaining:
+        ready = [key for key, step in remaining.items() if all(dep in ordered for dep in step["dependencies"])]
+        if not ready:
+            raise WorkflowError("cyclic or missing step dependencies: " + ", ".join(remaining))
+        for key in ready:
+            ordered[key] = remaining.pop(key)
+    return ordered
 
-
-def git_context(workspace: Path) -> dict[str, Any]:
-    probe = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"], cwd=workspace,
-        text=True, encoding="utf-8", errors="replace", capture_output=True,
-    )
-    if probe.returncode or probe.stdout.strip() != "true":
-        return {"available": False, "branch": None, "commit": None, "dirty": None}
-    branch = subprocess.run(
-        ["git", "branch", "--show-current"], cwd=workspace,
-        text=True, encoding="utf-8", errors="replace", capture_output=True, check=True,
-    ).stdout.strip()
-    commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=workspace,
-        text=True, encoding="utf-8", errors="replace", capture_output=True, check=True,
-    ).stdout.strip()
-    dirty = bool(subprocess.run(
-        ["git", "status", "--porcelain"], cwd=workspace,
-        text=True, encoding="utf-8", errors="replace", capture_output=True, check=True,
-    ).stdout.strip())
-    return {"available": True, "branch": branch, "commit": commit, "dirty": dirty}
-
-
-def latest_decision(path: Path, decision_type: str, after: str | None = None) -> dict[str, Any] | None:
-    if not path.exists():
+def latest_decision(path, decision_type, after=None):
+    if not path.is_file():
         return None
-    after_time = parse_time(after)
-    candidate = None
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-    for line in lines:
+    found = None
+    for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        try:
-            item = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if (
-            item.get("decision_type") == decision_type
-            and item.get("status") == "DECIDED"
-            and item.get("decided_by") == "human"
-        ):
-            decided_at = parse_time(item.get("decided_at"))
-            if after_time and (not decided_at or decided_at <= after_time):
-                continue
-            candidate = item
-    return candidate
+        item = json.loads(line)
+        if item.get("decision_type") == decision_type and item.get("status") == "DECIDED" and item.get("decided_by") == "human":
+            if not after or item.get("decided_at", "") > after:
+                found = item
+    return found
 
-
-def output_valid(path: Path, after: str | None = None) -> bool:
-    if not path.exists() or path.stat().st_size == 0:
-        return False
-    after_time = parse_time(after)
-    if after_time:
-        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-        if modified <= after_time:
-            return False
-    if path.suffix == ".json":
-        try:
-            json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return False
-    return True
-
-
-def step_record(manifest: dict[str, Any], step_id: str) -> dict[str, Any]:
-    return manifest.setdefault("steps", {}).setdefault(step_id, {"status": "pending"})
-
-
-def step_complete(workspace: Path, manifest: dict[str, Any], step: dict[str, Any]) -> bool:
-    record = step_record(manifest, step["id"])
-    if record.get("status") in {"running", "failed", "stale"}:
-        return False
-    stale_since = record.get("stale_since")
+def decision_for(root, step):
     checkpoint = step.get("checkpoint")
-    if checkpoint:
-        decision_relative = checkpoint.get("decision_file") or outputs_for(step, manifest["question_id"])[0]
-        decision_file = workspace / render(decision_relative, manifest["question_id"])
-        if not latest_decision(decision_file, checkpoint["decision_type"], stale_since):
-            return False
-    for relative in outputs_for(step, manifest["question_id"]):
-        if not output_valid(workspace / relative, stale_since):
-            return False
-    if "docx_delivery_check" in step.get("checks", []):
-        process = subprocess.run(
-            [sys.executable, str(CHECK_DIR / "docx_delivery_check.py"), "--paper-root", str(workspace / "paper")],
-            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30,
-        )
-        if process.returncode:
-            return False
-    return True
+    if not checkpoint:
+        return None
+    q = step["question_id"]
+    path = root / render(checkpoint.get("decision_file", f"methods/{q}/{q.lower()}_decisions.jsonl"), q)
+    return latest_decision(path, checkpoint["decision_type"])
 
+def evidence_paths(step, nodes):
+    paths = list(step.get("inputs", []))
+    for dep in step["dependencies"]:
+        paths.extend(p for p in nodes[dep]["outputs"] if not p.endswith(".jsonl"))
+    if step.get("checkpoint"):
+        paths.extend(p for p in step["outputs"] if not p.endswith(".jsonl"))
+    return paths
 
-def derive_question(
-    workspace: Path,
-    run: dict[str, Any],
-    template: dict[str, Any],
-    manifest: dict[str, Any],
-) -> dict[str, Any]:
-    steps = applicable_steps(template, run["config"])
-    current_gate = "G0"
-    next_step = None
-    for step in steps:
-        record = step_record(manifest, step["id"])
-        if step_complete(workspace, manifest, step):
-            if record.get("status") != "stale":
-                record["status"] = "completed"
-            gate = step.get("gate_after", current_gate)
-            if GATE_ORDER.get(gate, -1) > GATE_ORDER.get(current_gate, -1):
-                current_gate = gate
+def binding(root, step, nodes):
+    return c.fingerprints(root, evidence_paths(step, nodes))
+
+def snapshot(root, step, nodes):
+    data = c.fingerprints(root, [p for p in step["outputs"] if not p.endswith(".jsonl")] + evidence_paths(step, nodes))
+    if step.get("checkpoint"):
+        data["@decision"] = hash_value(decision_for(root, step))
+    if step.get("delivery_artifact") or step["id"] == "visual-review":
+        data.update(c.fingerprints(root, ["paper/sections", "paper/figures", "paper/refs.bib"]))
+    return data
+
+def state(root, run, template, override=None):
+    nodes = graph(root, run, template)
+    manifests = {q: load_manifest(root, q) for q in [*run["questions"], "GLOBAL"]}
+    if override:
+        manifests[override["question_id"]] = override
+    valid, errors = {}, {}
+    for key, step in nodes.items():
+        rec = step_record(manifests[step["question_id"]], step["id"])
+        deps_ok = all(valid[d] for d in step["dependencies"])
+        try:
+            matches = rec.get("snapshot") == snapshot(root, step, nodes)
+        except (OSError, ValueError):
+            matches = False
+        valid[key] = rec.get("status") == "completed" and deps_ok and matches
+        if rec.get("status") == "completed" and not valid[key]:
+            errors[key] = "inputs, outputs, decision, or upstream evidence changed"
+        elif not deps_ok:
+            errors[key] = "waiting for dependencies: " + ", ".join(d for d in step["dependencies"] if not valid[d])
+        elif rec.get("error"):
+            errors[key] = str(rec["error"])
+    return nodes, manifests, valid, errors
+
+def action_for(root, run, nodes, valid, q=None):
+    candidates = []
+    for key, step in nodes.items():
+        if valid[key] or (q and step["question_id"] not in {q, "GLOBAL"}):
             continue
-        next_step = step
-        if step.get("checkpoint"):
-            record["status"] = "waiting_human"
-        elif record.get("status") == "completed":
-            record.update({"status": "stale", "stale_since": now(), "error": "completed evidence no longer validates"})
-        elif record.get("status") not in {"running", "failed", "stale"}:
-            record["status"] = "ready"
-        break
+        if not all(valid[d] for d in step["dependencies"]):
+            continue
+        display_question = step["question_id"] if step["question_id"] != "GLOBAL" or q else (run["questions"][0] if run["questions"] else "GLOBAL")
+        candidates.append({"status": "READY", "question_id": display_question, "scope": step["question_id"], "node": key, "step": step["id"],
+            "skill": step["skill"], "outputs": step["outputs"], "checks": step.get("checks", []),
+            "owner": "human" if step.get("checkpoint") else "agent", "checkpoint": step.get("checkpoint"),
+            "evidence_hashes": binding(root, step, nodes)})
+    if candidates:
+        return next((a for a in candidates if a["owner"] == "agent"), candidates[0])
+    return {"status": "COMPLETE"} if all(valid.values()) else {"status": "BLOCKED", "reason": "unfinished dependencies; use next without --question"}
 
-    method_chosen = any(
-        step["id"] == "method-choice" and step_complete(workspace, manifest, step) for step in steps
-    )
-    frozen = any(step["id"] == "freeze" and step_complete(workspace, manifest, step) for step in steps)
-    delivery_steps = [step for step in steps if step.get("delivery_artifact")]
-    paper_ready = bool(delivery_steps) and all(
-        step_complete(workspace, manifest, step) for step in delivery_steps
-    )
-    complete = next_step is None
-    manifest["current_gate"] = "G6" if complete and run["profile"] == "submission" else current_gate
-    manifest["status"] = "completed" if complete else step_record(manifest, next_step["id"])["status"]
-    manifest["allowed"] = {
-        "code_generation": method_chosen,
-        "freeze": current_gate in {"G3", "G4", "G5", "G6"},
-        "paper_writing": frozen,
-        "final_assembly": complete or paper_ready,
-    }
-    manifest["blockers"] = []
-    if next_step and next_step.get("checkpoint"):
-        manifest["blockers"].append(next_step["checkpoint"]["reason"])
-    manifest["next_action"] = None if complete else {
-        "owner": "human" if next_step.get("checkpoint") else "agent",
-        "step": next_step["id"],
-        "skill": next_step["skill"],
-        "outputs": outputs_for(next_step, manifest["question_id"]),
-        "checks": next_step.get("checks", []),
-        "checkpoint": next_step.get("checkpoint"),
-    }
-    manifest["updated_at"] = now()
+def derive_question(root, run, template, manifest):
+    nodes, _, valid, errors = state(root, run, template, manifest)
+    q, gate = manifest["question_id"], "G0"
+    for key, step in nodes.items():
+        if step["question_id"] in {q, "GLOBAL"} and valid[key]:
+            candidate = step.get("gate_after", "G0")
+            if GATE_ORDER[candidate] > GATE_ORDER[gate]:
+                gate = candidate
+    complete = all(valid.values())
+    action = action_for(root, run, nodes, valid, q)
+    manifest.update(current_gate="G6" if complete and run["profile"] == "submission" else min(gate, "G5", key=GATE_ORDER.get),
+        status="completed" if complete else ("waiting_human" if action.get("owner") == "human" else action["status"].lower()),
+        next_action=action if action["status"] == "READY" else None,
+        blockers=[v for k, v in errors.items() if k.startswith(q + ":")])
+    manifest["allowed"] = {"code_generation": valid.get(f"{q}:method-choice", False),
+        "freeze": valid.get(f"{q}:result-verdict", False), "paper_writing": valid.get(f"{q}:freeze", False),
+        "final_assembly": all(valid.get(f"{x}:paper-section", False) for x in run["questions"])}
     return manifest
 
+def step_complete(root, manifest, step):
+    if not runtime_paths(root)["run"].is_file():
+        paths = [root / p for p in outputs_for(step, manifest["question_id"])]
+        if not all(p.is_file() and p.stat().st_size for p in paths):
+            return False
+        if step.get("id") == "docx-export":
+            files = sorted((root / "paper").rglob("*.tex"))
+            snap = [(p.relative_to(root).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest()) for p in files]
+            old = manifest.get("_compat_snapshot")
+            manifest["_compat_snapshot"] = snap
+            return old is None or old == snap
+        return True
+    run, template = load_runtime(root)
+    return state(root, run, template, manifest)[2].get(f"{manifest['question_id']}:{step['id']}", False)
 
-def load_runtime(workspace: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    paths = runtime_paths(workspace)
-    if not paths["run"].exists():
-        raise WorkflowError("workflow is not initialized")
-    run = read_json(paths["run"])
-    return run, load_template(run["profile"])
+def resolved_config(root, args, session, template):
+    config = {**template["defaults"], **session}
+    for argument, key in {"contest": "contest_profile", "paper_format": "paper_format", "delivery_mode": "delivery_mode",
+        "language": "implementation_language", "seed": "random_seed", "paper_language": "paper_language"}.items():
+        value = getattr(args, argument, None)
+        if value is not None:
+            config[key] = value
+    if config.get("implementation_language", "auto") == "auto":
+        config["implementation_language"] = "matlab" if any((root / "code").rglob("*.m")) else "python"
+    if config.get("paper_format") != "latex":
+        config["delivery_mode"] = "single"
+    for key, value in {"random_seed": 2026, "question_dependencies": {}, "research_budget_minutes": 30, "paper_reserve_minutes": 180}.items():
+        config.setdefault(key, value)
+    return config
 
-
-def load_manifest(workspace: Path, question: str) -> dict[str, Any]:
-    path = manifest_path(workspace, question)
-    if not path.exists():
-        raise WorkflowError(f"manifest does not exist: {question}")
-    return read_json(path)
-
-
-def save_manifest(workspace: Path, manifest: dict[str, Any]) -> None:
-    write_json(manifest_path(workspace, manifest["question_id"]), manifest)
-
-
-def record_event(workspace: Path, event: str, **fields: Any) -> None:
-    append_jsonl(runtime_paths(workspace)["events"], {
-        "schema_version": 1, "event": event, "recorded_at": now(), **fields,
-    })
-
-
-def initial_manifest(question: str, profile: str) -> dict[str, Any]:
-    return {
-        "schema_version": 1,
-        "question_id": question,
-        "rigor_profile": profile,
-        "current_gate": "G0",
-        "status": "ready",
-        "artifacts": {},
-        "steps": {},
-        "allowed": {
-            "code_generation": False,
-            "freeze": False,
-            "paper_writing": False,
-            "final_assembly": False,
-        },
-        "blockers": [],
-        "next_action": {"owner": "agent", "step": "problem-parse", "skill": "problem-parser"},
-        "updated_at": now(),
-    }
-
-
-def cmd_init(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    paths = runtime_paths(workspace)
+def cmd_init(root, args):
+    paths = runtime_paths(root)
     if paths["run"].exists():
-        raise WorkflowError("workflow_run.json already exists; refusing to overwrite")
-    template = load_template(args.profile)
-    questions = [normalize_question(item) for item in args.questions.split(",") if item.strip()]
-    if not questions or len(questions) != len(set(questions)):
-        raise WorkflowError("questions must be a non-empty unique comma-separated list")
-    git = git_context(workspace)
-    if not git["available"] and not args.allow_no_git:
-        raise WorkflowError("formal harness requires a Git repository; pass --allow-no-git only for isolated diagnostics")
-    defaults = dict(template.get("defaults", {}))
-    selected_paper_format = args.paper_format or defaults.get("paper_format")
-    selected_delivery_mode = getattr(args, "delivery_mode", None)
-    if selected_delivery_mode is None:
-        selected_delivery_mode = defaults.get("delivery_mode", "single")
-        if args.paper_format and args.paper_format != "latex":
-            selected_delivery_mode = "single"
-    defaults.update({
-        "contest_profile": args.contest,
-        "paper_format": selected_paper_format,
-        "delivery_mode": selected_delivery_mode,
-        "implementation_language": args.language,
-        "random_seed": args.seed,
-    })
-    run = {
-        "schema_version": 1,
-        "workflow_id": args.workflow_id,
-        "profile": args.profile,
-        "template": template_path(args.profile).name,
-        "status": "running",
-        "questions": questions,
-        "config": defaults,
-        "git_at_init": git,
-        "created_at": now(),
-        "updated_at": now(),
-    }
+        raise WorkflowError("workflow exists; use reconfigure or migrate")
+    session = read_json(paths["session"]) if paths["session"].exists() else {}
+    profile = getattr(args, "profile", None) or session.get("rigor_profile", "submission")
+    template = load_template(profile)
+    config = resolved_config(root, args, session, template)
+    raw = getattr(args, "questions", None)
+    questions = [normalize_question(q) for q in raw.split(",")] if raw else session.get("active_questions", ["Q1"])
+    if len(set(questions)) != len(questions) or "GLOBAL" in questions or not questions:
+        raise WorkflowError("invalid question list")
+    if not git_context(root)["available"] and not getattr(args, "allow_no_git", False):
+        raise WorkflowError("formal workflow requires Git")
+    session.update(config, rigor_profile=profile, active_questions=questions)
+    session.setdefault("schema_version", 1)
+    session.setdefault("interaction_mode", "speed")
+    run = {"schema_version": 1, "runtime_revision": RUNTIME_REVISION, "profile": profile, "questions": questions,
+        "workflow_id": getattr(args, "workflow_id", None) or "math-modeling-session", "status": "running",
+        "config": config, "session_hash": hash_value(session), "template_snapshot": template,
+        "iterations": {q: "round1" for q in questions}, "created_at": now()}
+    graph(root, run, template)
+    write_json(paths["session"], session)
     write_json(paths["run"], run)
-    if not paths["session"].exists():
-        write_json(paths["session"], {
-            "schema_version": 1,
-            "contest_profile": args.contest,
-            "rigor_profile": args.profile,
-            "interaction_mode": "speed",
-            "implementation_language": args.language,
-            "paper_language": defaults.get("paper_language", "zh-CN"),
-            "paper_format": defaults.get("paper_format", "latex"),
-            "delivery_mode": defaults.get("delivery_mode", "single"),
-            "random_seed": args.seed,
-            "active_questions": questions,
-            "version_control": {"enabled": git["available"], "stable_branch": git.get("branch") or "main"},
-        })
+    for q in [*questions, "GLOBAL"]:
+        save_manifest(root, initial_manifest(q, profile))
     write_json(paths["artifacts"], {"schema_version": 1, "items": []})
-    paths["events"].parent.mkdir(parents=True, exist_ok=True)
-    paths["events"].touch(exist_ok=True)
-    paths["experiments"].touch(exist_ok=True)
-    for question in questions:
-        manifest = derive_question(workspace, run, template, initial_manifest(question, args.profile))
-        save_manifest(workspace, manifest)
-    record_event(workspace, "workflow_initialized", workflow_id=args.workflow_id, questions=questions, profile=args.profile)
-    return {"status": "INITIALIZED", "workflow": run, "next": cmd_next(workspace, argparse.Namespace(question=None))}
+    record_event(root, "initialized", runtime_revision=RUNTIME_REVISION)
+    return {"status": "INITIALIZED", "workflow": run, "next": cmd_next(root, argparse.Namespace(question=None))}
 
-
-def cmd_status(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    run, template = load_runtime(workspace)
-    questions = [normalize_question(args.question)] if getattr(args, "question", None) else run["questions"]
-    states = []
-    for question in questions:
-        manifest = derive_question(workspace, run, template, load_manifest(workspace, question))
-        states.append({
-            "question_id": question,
-            "gate": manifest["current_gate"],
-            "status": manifest["status"],
-            "blockers": manifest["blockers"],
-            "next_action": manifest["next_action"],
-        })
-    return {"workflow_id": run["workflow_id"], "profile": run["profile"], "status": run["status"], "git": git_context(workspace), "questions": states}
-
-
-def cmd_next(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    run, template = load_runtime(workspace)
+def cmd_next(root, args):
+    run, template = load_runtime(root)
     if run["status"] == "paused":
         return {"status": "PAUSED", "reason": run.get("pause_reason")}
-    questions = [normalize_question(args.question)] if getattr(args, "question", None) else run["questions"]
-    for question in questions:
-        manifest = derive_question(workspace, run, template, load_manifest(workspace, question))
-        if manifest["next_action"]:
-            return {"status": "READY", "question_id": question, **manifest["next_action"]}
-    return {"status": "COMPLETE", "question_ids": questions}
-
-
-def resolve_step(
-    workspace: Path, run: dict[str, Any], template: dict[str, Any], question: str, requested: str | None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    manifest = derive_question(workspace, run, template, load_manifest(workspace, question))
-    action = manifest.get("next_action")
-    if not action:
-        raise WorkflowError(f"{question} is complete")
-    step_id = requested or action["step"]
-    if step_id != action["step"]:
-        raise WorkflowError(f"expected next step {action['step']}, got {step_id}")
-    step = next((item for item in applicable_steps(template, run["config"]) if item["id"] == step_id), None)
-    if not step:
-        raise WorkflowError(f"step not found in active template: {step_id}")
-    return manifest, step
-
-
-def cmd_start(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    run, template = load_runtime(workspace)
-    if run["status"] == "paused":
-        raise WorkflowError("workflow is paused")
-    question = normalize_question(args.question)
-    manifest, step = resolve_step(workspace, run, template, question, args.step)
-    record = step_record(manifest, step["id"])
-    record.update({"status": "running", "started_at": now(), "git": git_context(workspace), "error": None})
-    save_manifest(workspace, manifest)
-    record_event(workspace, "step_started", question_id=question, step=step["id"], skill=step["skill"])
-    return {"status": "RUNNING", "question_id": question, "step": step["id"], "skill": step["skill"]}
-
-
-def validate_step(workspace: Path, manifest: dict[str, Any], step: dict[str, Any]) -> list[str]:
-    errors = []
-    record = step_record(manifest, step["id"])
-    stale_since = record.get("stale_since")
-    for relative in outputs_for(step, manifest["question_id"]):
-        if not output_valid(workspace / relative, stale_since):
-            errors.append(f"missing, invalid, or stale output: {relative}")
-    checkpoint = step.get("checkpoint")
-    if checkpoint:
-        decision_relative = checkpoint.get("decision_file") or outputs_for(step, manifest["question_id"])[0]
-        decision_path = workspace / render(decision_relative, manifest["question_id"])
-        if not latest_decision(decision_path, checkpoint["decision_type"], stale_since):
-            errors.append(f"missing fresh human DECIDED record: {checkpoint['decision_type']}")
-    if "docx_delivery_check" in step.get("checks", []) and not errors:
-        process = subprocess.run(
-            [sys.executable, str(CHECK_DIR / "docx_delivery_check.py"), "--paper-root", str(workspace / "paper")],
-            text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30,
-        )
-        if process.returncode:
-            errors.append("DOCX delivery check failed: " + (process.stdout or process.stderr).strip())
-    return errors
-
-
-def update_artifact_index(workspace: Path, question: str, step: dict[str, Any], outputs: list[str]) -> None:
-    path = runtime_paths(workspace)["artifacts"]
-    index = read_json(path)
-    items = [item for item in index.get("items", []) if not (item.get("question_id") == question and item.get("step") == step["id"])]
-    for relative in outputs:
-        item_path = workspace / relative
-        items.append({
-            "question_id": question,
-            "step": step["id"],
-            "artifact_key": step.get("artifact_key"),
-            "path": relative,
-            "size": item_path.stat().st_size,
-            "updated_at": now(),
-            "git": git_context(workspace),
-        })
-    index["items"] = items
-    write_json(path, index)
-
-
-def cmd_finish(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    run, template = load_runtime(workspace)
-    question = normalize_question(args.question)
-    manifest, step = resolve_step(workspace, run, template, question, args.step)
-    errors = validate_step(workspace, manifest, step)
-    record = step_record(manifest, step["id"])
-    if errors:
-        record.update({"status": "failed", "error": errors, "completed_at": now()})
-        save_manifest(workspace, manifest)
-        record_event(workspace, "step_failed", question_id=question, step=step["id"], errors=errors)
-        raise WorkflowError("; ".join(errors))
-    outputs = outputs_for(step, question)
-    record.update({
-        "status": "completed", "completed_at": now(), "outputs": outputs,
-        "git": git_context(workspace), "error": None,
-    })
-    record.pop("stale_since", None)
-    if step.get("artifact_key") and outputs:
-        manifest.setdefault("artifacts", {})[step["artifact_key"]] = outputs[0]
-    update_artifact_index(workspace, question, step, outputs)
-    manifest = derive_question(workspace, run, template, manifest)
-    save_manifest(workspace, manifest)
-    record_event(workspace, "step_completed", question_id=question, step=step["id"], outputs=outputs)
-    return {"status": "COMPLETED", "question_id": question, "step": step["id"], "next": manifest["next_action"]}
-
-
-def cmd_pause(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    run, _ = load_runtime(workspace)
-    run.update({"status": "paused", "pause_reason": args.reason, "updated_at": now()})
-    write_json(runtime_paths(workspace)["run"], run)
-    record_event(workspace, "workflow_paused", reason=args.reason)
-    return {"status": "PAUSED", "reason": args.reason}
-
-
-def cmd_resume(workspace: Path, _: argparse.Namespace) -> dict[str, Any]:
-    run, _ = load_runtime(workspace)
-    run.update({"status": "running", "pause_reason": None, "updated_at": now()})
-    write_json(runtime_paths(workspace)["run"], run)
-    record_event(workspace, "workflow_resumed")
-    return {"status": "RUNNING"}
-
-
-def cmd_rerun(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    run, template = load_runtime(workspace)
-    question = normalize_question(args.question)
-    manifest = load_manifest(workspace, question)
-    steps = applicable_steps(template, run["config"])
-    ids = [step["id"] for step in steps]
-    if args.from_step not in ids:
-        raise WorkflowError(f"unknown active step: {args.from_step}")
-    freeze_step = next((step for step in steps if step["id"] == "freeze"), None)
-    freeze_was_complete = bool(freeze_step and step_complete(workspace, manifest, freeze_step))
-    stamp = now()
-    affected = ids[ids.index(args.from_step):]
-    for step_id in affected:
-        step_record(manifest, step_id).update({"status": "stale", "stale_since": stamp, "error": None})
-    frozen_outputs_exist = bool(
-        freeze_step
-        and any((workspace / item).exists() for item in outputs_for(freeze_step, question))
-    )
-    if freeze_was_complete or frozen_outputs_exist:
-        manifest["freeze_state"] = "thaw_required"
-    manifest = derive_question(workspace, run, template, manifest)
-    save_manifest(workspace, manifest)
-    record_event(workspace, "steps_marked_stale", question_id=question, from_step=args.from_step, affected=affected)
-    return {"status": "STALE", "question_id": question, "affected": affected, "next": manifest["next_action"]}
-
-
-def cmd_check(workspace: Path, _: argparse.Namespace) -> dict[str, Any]:
-    run, template = load_runtime(workspace)
-    errors = []
-    step_ids = [step["id"] for step in applicable_steps(template, run["config"])]
-    if len(step_ids) != len(set(step_ids)):
-        errors.append("duplicate active step ids")
-    for step in applicable_steps(template, run["config"]):
-        for check in step.get("checks", []):
-            if check in BUILTIN_CHECKS:
-                continue
-            if not (CHECK_DIR / f"{check}.py").exists():
-                errors.append(f"missing check implementation: {check}")
-    questions = []
-    for question in run["questions"]:
-        manifest = derive_question(workspace, run, template, load_manifest(workspace, question))
-        questions.append({"question_id": question, "gate": manifest["current_gate"], "next": manifest["next_action"]})
-    return {"status": "PASSED" if not errors else "FAILED", "errors": errors, "questions": questions}
-
-
-def cmd_compare(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    script = SKILL_DIR.parent / "git-experiment-manager" / "scripts" / "compare_experiments.py"
-    command = [sys.executable, str(script), str((workspace / args.left).resolve()), str((workspace / args.right).resolve())]
-    if args.output:
-        command.extend(["--output", str((workspace / args.output).resolve())])
-    process = subprocess.run(command, text=True, encoding="utf-8", errors="replace", capture_output=True)
-    if process.returncode not in {0, 2}:
-        raise WorkflowError(process.stdout or process.stderr)
-    result = json.loads(process.stdout)
-    result["exit_code"] = process.returncode
+    nodes, _, valid, _ = state(root, run, template)
+    result = action_for(root, run, nodes, valid, getattr(args, "question", None))
+    deadline = run["config"].get("deadline_at")
+    if deadline:
+        remaining = (datetime.fromisoformat(deadline.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds() / 60
+        result["remaining_minutes"] = round(remaining, 1)
+        if remaining <= run["config"]["paper_reserve_minutes"]:
+            result["time_guidance"] = "protect paper time; finish minimum viable answers; defer optional experiments; never auto-approve"
     return result
 
+def cmd_status(root, args):
+    run, template = load_runtime(root)
+    _, _, valid, errors = state(root, run, template)
+    return {"status": "completed" if all(valid.values()) else ("paused" if run["status"] == "paused" else "running"),
+        "profile": run["profile"], "questions": [derive_question(root, run, template, load_manifest(root, q)) for q in run["questions"]],
+        "invalidated": errors, "next": cmd_next(root, args)}
 
-def cmd_export(workspace: Path, args: argparse.Namespace) -> dict[str, Any]:
-    destination = args.destination.resolve()
-    if destination.exists():
-        raise WorkflowError(f"destination already exists: {destination}")
-    roots = ["planning", "methods", "code", "results", "robustness", "paper"]
-    files = []
-    for root_name in roots:
-        root = workspace / root_name
-        if root.exists():
-            files.extend(path for path in root.rglob("*") if path.is_file() and "data_raw" not in path.parts)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(set(files)):
-            archive.write(path, path.relative_to(workspace).as_posix())
-    return {"status": "EXPORTED", "destination": str(destination), "file_count": len(set(files))}
+def resolve_step(root, run, template, q, requested):
+    nodes, manifests, valid, _ = state(root, run, template)
+    action = action_for(root, run, nodes, valid, q)
+    sid = requested or action.get("step")
+    key = f"{q}:{sid}" if f"{q}:{sid}" in nodes else f"GLOBAL:{sid}"
+    if key not in nodes or valid[key] or not all(valid[d] for d in nodes[key]["dependencies"]):
+        raise WorkflowError(f"step is not ready: {key}")
+    step = nodes[key]
+    return manifests[step["question_id"]], step
+
+def cmd_start(root, args):
+    run, template = load_runtime(root)
+    if run["status"] == "paused":
+        raise WorkflowError("workflow paused")
+    manifest, step = resolve_step(root, run, template, normalize_question(args.question), args.step)
+    nodes = graph(root, run, template)
+    step_record(manifest, step["id"]).update(status="running", started_at=now(), input_snapshot=binding(root, step, nodes), error=None)
+    save_manifest(root, manifest)
+    record_event(root, "started", question_id=step["question_id"], step=step["id"])
+    return {"status": "RUNNING", "step": step["id"], "evidence_hashes": binding(root, step, nodes)}
+
+def validate_step(root, manifest, step):
+    run, template = load_runtime(root)
+    nodes = graph(root, run, template)
+    step = nodes.get(f"{manifest['question_id']}:{step['id']}", step)
+    errors = c.execute(root, step, run["config"])
+    if step.get("checkpoint"):
+        decision = decision_for(root, step) or {}
+        allowed = step["checkpoint"].get("choices")
+        choice_ok = decision.get("choice") in allowed if allowed else bool(decision.get("choice"))
+        if step["id"] == "method-choice":
+            selected = decision.get("selected_method") or decision.get("choice")
+            choice_ok = bool(selected) and selected not in {"accept", "reject", "adjust", "fallback"}
+        if not choice_ok or not decision.get("decision_id") or not decision.get("user_message"):
+            errors.append("missing typed human choice with decision_id and actual user_message")
+        if decision.get("evidence_hashes") != binding(root, step, nodes):
+            errors.append("human decision not bound to current evidence; use decision-context")
+        if step["id"] == "result-verdict" and decision.get("experiment_id") != run["iterations"][step["question_id"]]:
+            errors.append("verdict belongs to another experiment")
+    return errors
+
+def cmd_finish(root, args):
+    run, template = load_runtime(root)
+    if run["status"] == "paused":
+        raise WorkflowError("workflow paused")
+    manifest, step = resolve_step(root, run, template, normalize_question(args.question), args.step)
+    record = step_record(manifest, step["id"])
+    if record.get("status") != "running":
+        raise WorkflowError("start before finish; file presence cannot complete a step")
+    errors = validate_step(root, manifest, step)
+    nodes = graph(root, run, template)
+    if not step.get("checkpoint") and record.get("input_snapshot") != binding(root, step, nodes):
+        errors.append("inputs changed during execution; restart step")
+    if errors:
+        record.update(status="failed", error=errors)
+        save_manifest(root, manifest)
+        raise WorkflowError("; ".join(errors))
+    decision = decision_for(root, step)
+    if decision and decision["choice"] in {"reject", "adjust", "fallback"}:
+        target = decision.get("rerun_from") or ("method-screen" if decision["choice"] == "fallback" else "model-run")
+        if target not in {"data-audit", "feature-engineering", "method-screen", "code-plan", "model-run"}:
+            raise WorkflowError("invalid diagnostic rerun_from")
+        record.update(status="rejected", decision_id=decision["decision_id"])
+        save_manifest(root, manifest)
+        record_event(root, "result_" + decision["choice"], decision=decision)
+        result = cmd_rerun(root, argparse.Namespace(question=step["question_id"], from_step=target, new_experiment=True))
+        result["git_action"] = "preserve rejected experiment; use Git decision command before implementing next iteration"
+        return result
+    record.update(status="completed", snapshot=snapshot(root, step, nodes), completed_at=now(), error=None)
+    if step["id"] == "freeze":
+        manifest["freeze_state"] = "frozen"
+    save_manifest(root, manifest)
+    index = read_json(runtime_paths(root)["artifacts"])
+    key = f"{step['question_id']}:{step['id']}"
+    index["items"] = [x for x in index["items"] if x.get("node") != key]
+    index["items"].append({"node": key, "paths": step["outputs"], "fingerprints": record["snapshot"]})
+    write_json(runtime_paths(root)["artifacts"], index)
+    record_event(root, "completed", node=key)
+    nxt = cmd_next(root, argparse.Namespace(question=None))
+    run["status"] = "completed" if nxt["status"] == "COMPLETE" else "running"
+    write_json(runtime_paths(root)["run"], run)
+    return {"status": "COMPLETED", "step": step["id"], "next": nxt}
+
+def cmd_rerun(root, args):
+    run, template = load_runtime(root)
+    nodes, manifests, _, _ = state(root, run, template)
+    q = normalize_question(args.question)
+    key = f"{q}:{args.from_step}"
+    if key not in nodes:
+        key = f"GLOBAL:{args.from_step}"
+    if key not in nodes:
+        raise WorkflowError("unknown active rerun step")
+    affected = {key}
+    for node, step in nodes.items():
+        if any(d in affected for d in step["dependencies"]):
+            affected.add(node)
+    if getattr(args, "new_experiment", False):
+        run["iterations"][q] = "run-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    for node in affected:
+        step = nodes[node]
+        manifest = manifests[step["question_id"]]
+        rec = step_record(manifest, step["id"])
+        if step["id"] == "freeze" and rec.get("status") == "completed":
+            manifest["freeze_state"] = "thaw_required"
+            record_event(root, "thaw", question_id=step["question_id"], cause=key)
+        rec.update(status="stale", error=None, stale_since=now())
+    for manifest in manifests.values():
+        save_manifest(root, manifest)
+    run["status"] = "running"
+    write_json(runtime_paths(root)["run"], run)
+    record_event(root, "rerun", rerun_root=key, affected=sorted(affected))
+    return {"status": "STALE", "affected": sorted(affected), "next": cmd_next(root, argparse.Namespace(question=q))}
+
+def cmd_pause(root, args):
+    run, _ = load_runtime(root)
+    run.update(status="paused", pause_reason=args.reason)
+    write_json(runtime_paths(root)["run"], run)
+    return {"status": "PAUSED"}
+
+def cmd_resume(root, args):
+    run, _ = load_runtime(root)
+    run.update(status="running", pause_reason=None)
+    write_json(runtime_paths(root)["run"], run)
+    return {"status": "RUNNING"}
+
+def cmd_check(root, args):
+    run, template = load_runtime(root)
+    nodes, _, valid, errors = state(root, run, template)
+    changed = {k: v for k, v in errors.items() if "changed" in v}
+    return {"status": "FAILED" if changed else "PASSED", "invalidated": changed, "node_count": len(nodes),
+            "completed_nodes": sum(valid.values()), "scope": "structure_and_evidence_freshness"}
+
+def cmd_reconfigure(root, args):
+    paths = runtime_paths(root)
+    run, session = read_json(paths["run"]), read_json(paths["session"])
+    profile = session.get("rigor_profile", run["profile"])
+    migrate = getattr(args, "command", "") == "migrate"
+    template = load_template(profile) if migrate or profile != run["profile"] else run["template_snapshot"]
+    backup = root / "planning/history" / ("migration-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f") + ".json")
+    write_json(backup, {"run": run, "manifests": [read_json(p) for p in paths["manifests"].glob("*.json")]})
+    previous = run.get("config", {})
+    config = resolved_config(root, argparse.Namespace(), session, template)
+    run.update(runtime_revision=RUNTIME_REVISION, config=config, profile=profile, template_snapshot=template,
+               session_hash=hash_value(session), status="running")
+    run.setdefault("iterations", {q: "round1" for q in run["questions"]})
+    graph(root, run, template)
+    write_json(paths["run"], run)
+    for q in [*run["questions"], "GLOBAL"]:
+        if not manifest_path(root, q).exists():
+            save_manifest(root, initial_manifest(q, profile))
+    changed = {k for k in set(previous) | set(config) if previous.get(k) != config.get(k)}
+    paper_only = changed <= {"paper_format", "delivery_mode", "paper_language", "research_budget_minutes", "paper_reserve_minutes", "deadline_at"}
+    for q in run["questions"]:
+        target = "paper-section" if paper_only and profile == "submission" and not migrate else "problem-parse"
+        cmd_rerun(root, argparse.Namespace(question=q, from_step=target, new_experiment=False))
+    record_event(root, "reconfigured", changed=sorted(changed), backup=str(backup))
+    return {"status": "RECONFIGURED", "backup": str(backup), "next": cmd_next(root, argparse.Namespace(question=None))}
+
+def cmd_compare(root, args):
+    script = SKILL_DIR.parent / "git-experiment-manager/scripts/compare_experiments.py"
+    command = [sys.executable, str(script), str(c.inside(root, args.left)), str(c.inside(root, args.right))]
+    if args.output:
+        command.extend(["--output", str(c.inside(root, args.output))])
+    proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode not in {0, 2}:
+        raise WorkflowError(proc.stdout or proc.stderr)
+    return json.loads(proc.stdout)
+
+def cmd_export(root, args):
+    run, template = load_runtime(root)
+    if not all(state(root, run, template)[2].values()):
+        raise WorkflowError("export requires current completed workflow evidence")
+    target = args.destination.resolve()
+    if target.exists():
+        raise WorkflowError("destination exists")
+    overleaf = getattr(args, "overleaf", False)
+    roots = ["paper"] if overleaf else ["planning", "methods", "code", "results", "robustness", "paper", "workspace"]
+    excluded = {"data_raw", "raw", "__pycache__", ".git", ".venv", "cache"}
+    files = [p for name in roots for p in (root / name).rglob("*") if p.is_file() and not excluded.intersection(p.relative_to(root).parts)
+             and p.suffix not in {".aux", ".log", ".tmp", ".pyc"}]
+    if overleaf:
+        files = [p for p in files if p.suffix in {".tex", ".bib", ".cls", ".sty", ".png", ".jpg", ".pdf", ".eps"} and p.name != "main.pdf" and "exports" not in p.parts]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
+        for p in files:
+            out.write(p, p.relative_to(root / "paper" if overleaf else root).as_posix())
+    return {"status": "EXPORTED", "destination": str(target), "files": len(files)}
+
+def cmd_decision_context(root, args):
+    run, template = load_runtime(root)
+    _, step = resolve_step(root, run, template, normalize_question(args.question), args.step)
+    return {"status": "READY", "step": step["id"], "checkpoint": step.get("checkpoint"),
+            "experiment_id": run["iterations"].get(step["question_id"]), "evidence_hashes": binding(root, step, graph(root, run, template))}
+
+def smoke_test():
+    from smoke_case import run_smoke
+    return run_smoke()
 
 
-def create_smoke_output(workspace: Path, step: dict[str, Any], question: str) -> None:
-    checkpoint = step.get("checkpoint")
-    for relative in outputs_for(step, question):
-        path = workspace / relative
+def create_smoke_output(workspace, step, question):
+    """Compatibility fixture for focused delivery-check tests; formal runtime never uses it."""
+    for raw in outputs_for(step, question):
+        path = workspace / raw
         path.parent.mkdir(parents=True, exist_ok=True)
-        if path.suffix == ".jsonl":
-            if checkpoint:
-                append_jsonl(path, {
-                    "schema_version": 1,
-                    "decision_id": f"smoke_{checkpoint['decision_type']}",
-                    "decision_type": checkpoint["decision_type"],
-                    "status": "DECIDED",
-                    "decided_by": "human",
-                    "choice": "smoke-choice",
-                    "rationale": "smoke-test human fixture",
-                    "evidence_refs": [],
-                    "decided_at": now(),
-                })
-        elif path.suffix == ".json":
-            write_json(path, {"schema_version": 1, "status": "smoke"})
-        elif path.suffix == ".pdf":
-            path.write_bytes(b"%PDF-1.4\n% structural smoke fixture\n")
+        if path.suffix == ".json":
+            write_json(path, {"status": "passed", "schema_version": 1})
         elif path.suffix == ".docx":
             with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("[Content_Types].xml", "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>")
-                archive.writestr("_rels/.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>")
-                archive.writestr("word/document.xml", "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>smoke</w:t></w:r></w:p></w:body></w:document>")
-                archive.writestr("word/styles.xml", "<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"/>")
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("word/document.xml", "<document/>")
         else:
-            path.write_text("smoke evidence\n", encoding="utf-8")
+            path.write_text("compatibility smoke fixture\n", encoding="utf-8")
     if step.get("id") == "docx-export":
-        source = workspace / "paper" / "main.tex"
-        docx = workspace / "paper" / "exports" / "main.docx"
-        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
-        docx_hash = hashlib.sha256(docx.read_bytes()).hexdigest()
-        write_json(workspace / "paper" / "docx_export_report.json", {
-            "schema_version": 1,
-            "status": "passed",
-            "canonical_source": str(source),
-            "source_sha256": source_hash,
-            "source_bundle_sha256": delivery_source_bundle(source.parent, source),
-            "output": str(docx),
-            "output_sha256": docx_hash,
-            "docx_is_derived": True,
-        })
-        write_json(workspace / "paper" / "docx_delivery_check.json", {
-            "schema_version": 1,
-            "status": "passed_with_visual_check_pending",
-            "canonical_source": str(source),
-            "docx": str(docx),
-            "docx_is_derived": True,
-            "errors": [],
-        })
-    if checkpoint and checkpoint.get("decision_file"):
-        decision_path = workspace / render(checkpoint["decision_file"], question)
-        decision_path.parent.mkdir(parents=True, exist_ok=True)
-        append_jsonl(decision_path, {
-            "schema_version": 1,
-            "decision_id": f"smoke_{checkpoint['decision_type']}",
-            "decision_type": checkpoint["decision_type"],
-            "status": "DECIDED",
-            "decided_by": "human",
-            "choice": "smoke-choice",
-            "rationale": "smoke-test human fixture",
-            "evidence_refs": [],
-            "decided_at": now(),
-        })
+        source = workspace / "paper/main.tex"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        if not source.exists():
+            source.write_text("fixture\n", encoding="utf-8")
+        docx = workspace / "paper/exports/main.docx"
+        docx.parent.mkdir(parents=True, exist_ok=True)
+        if not docx.exists():
+            with zipfile.ZipFile(docx, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("word/document.xml", "<document/>")
+        write_json(workspace / "paper/docx_export_report.json", {"status": "passed", "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(), "source_bundle_sha256": "fixture", "output_sha256": hashlib.sha256(docx.read_bytes()).hexdigest()})
+        write_json(workspace / "paper/docx_delivery_check.json", {"status": "passed"})
 
-
-def smoke_test() -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="math-modeling-runtime-") as temp:
-        workspace = Path(temp)
-        subprocess.run(["git", "init", "-b", "main"], cwd=workspace, capture_output=True, check=True)
-        subprocess.run(["git", "config", "user.name", "Harness Smoke"], cwd=workspace, check=True)
-        subprocess.run(["git", "config", "user.email", "smoke@example.invalid"], cwd=workspace, check=True)
-        (workspace / "seed.txt").write_text("seed\n", encoding="utf-8")
-        subprocess.run(["git", "add", "seed.txt"], cwd=workspace, check=True)
-        subprocess.run(["git", "commit", "-m", "seed"], cwd=workspace, capture_output=True, check=True)
-        init_args = argparse.Namespace(
-            profile="submission", questions="Q1", contest="CUMCM", paper_format="latex",
-            delivery_mode="latex_primary_docx_mirror", language="python", seed=2026,
-            workflow_id="smoke", allow_no_git=False,
-        )
-        cmd_init(workspace, init_args)
-        run, template = load_runtime(workspace)
-        sequence = []
-        pauses = []
-        while True:
-            action = cmd_next(workspace, argparse.Namespace(question="Q1"))
-            if action["status"] == "COMPLETE":
-                break
-            step = next(item for item in applicable_steps(template, run["config"]) if item["id"] == action["step"])
-            if action.get("checkpoint"):
-                pauses.append(action["checkpoint"]["reason"])
-            cmd_start(workspace, argparse.Namespace(question="Q1", step=step["id"]))
-            create_smoke_output(workspace, step, "Q1")
-            cmd_finish(workspace, argparse.Namespace(question="Q1", step=step["id"]))
-            sequence.append(step["id"])
-        check = cmd_check(workspace, argparse.Namespace())
-        rerun = cmd_rerun(workspace, argparse.Namespace(question="Q1", from_step="model-run"))
-        if rerun["next"]["step"] != "model-run":
-            raise AssertionError("rerun did not return to model-run")
-        configured_pauses = [item["reason"] for item in template["human_checkpoints"]]
-        if any(item["policy"] != "never_auto_approve" for item in template["human_checkpoints"]):
-            raise AssertionError("a checkpoint can auto-approve")
-        return {
-            "status": "PASSED",
-            "steps": sequence,
-            "observed_path_pauses": pauses,
-            "configured_human_pauses": configured_pauses,
-            "rerun_next": rerun["next"]["step"],
-            "runtime_check": check["status"],
-        }
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--workspace", type=Path, default=Path.cwd())
-    sub = parser.add_subparsers(dest="command", required=True)
-
+def build_parser():
+    p = argparse.ArgumentParser()
+    p.add_argument("--workspace", type=Path, default=Path.cwd())
+    sub = p.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init")
-    init.add_argument("--profile", choices=("lean", "submission"), default="submission")
-    init.add_argument("--questions", default="Q1")
-    init.add_argument("--contest", default="CUMCM")
+    init.add_argument("--profile", choices=("lean", "submission"))
+    init.add_argument("--questions")
+    init.add_argument("--contest")
     init.add_argument("--paper-format", choices=("latex", "word", "markdown", "none"))
-    init.add_argument(
-        "--delivery-mode", choices=("single", "latex_primary_docx_mirror"),
-        help="single artifact or canonical LaTeX plus a derived DOCX mirror",
-    )
-    init.add_argument("--language", choices=("auto", "python", "matlab"), default="auto")
-    init.add_argument("--seed", type=int, default=2026)
-    init.add_argument("--workflow-id", default="math-modeling-session")
+    init.add_argument("--delivery-mode", choices=("single", "latex_primary_docx_mirror"))
+    init.add_argument("--language", choices=("auto", "python", "matlab"))
+    init.add_argument("--paper-language")
+    init.add_argument("--workflow-id")
+    init.add_argument("--seed", type=int)
     init.add_argument("--allow-no-git", action="store_true")
-
     for name in ("status", "next"):
-        action = sub.add_parser(name)
-        action.add_argument("--question")
-    for name in ("start", "finish"):
-        action = sub.add_parser(name)
-        action.add_argument("--question", required=True)
-        action.add_argument("--step")
-    pause = sub.add_parser("pause")
-    pause.add_argument("--reason", required=True)
-    sub.add_parser("resume")
+        sub.add_parser(name).add_argument("--question")
+    for name in ("start", "finish", "decision-context"):
+        cmd = sub.add_parser(name)
+        cmd.add_argument("--question", required=True)
+        cmd.add_argument("--step")
+    sub.add_parser("pause").add_argument("--reason", required=True)
+    for name in ("resume", "check", "migrate", "reconfigure", "smoke"):
+        sub.add_parser(name)
     rerun = sub.add_parser("rerun")
     rerun.add_argument("--question", required=True)
     rerun.add_argument("--from-step", required=True)
-    sub.add_parser("check")
-    compare = sub.add_parser("compare")
-    compare.add_argument("left")
-    compare.add_argument("right")
-    compare.add_argument("--output")
+    rerun.add_argument("--new-experiment", action="store_true")
+    comp = sub.add_parser("compare")
+    comp.add_argument("left")
+    comp.add_argument("right")
+    comp.add_argument("--output")
     export = sub.add_parser("export")
     export.add_argument("--destination", type=Path, required=True)
-    sub.add_parser("smoke")
-    return parser
+    export.add_argument("--overleaf", action="store_true")
+    return p
 
-
-def main() -> int:
+def main():
     args = build_parser().parse_args()
-    workspace = args.workspace.resolve()
-    handlers = {
-        "init": cmd_init,
-        "status": cmd_status,
-        "next": cmd_next,
-        "start": cmd_start,
-        "finish": cmd_finish,
-        "pause": cmd_pause,
-        "resume": cmd_resume,
-        "rerun": cmd_rerun,
-        "check": cmd_check,
-        "compare": cmd_compare,
-        "export": cmd_export,
-        "smoke": lambda _workspace, _args: smoke_test(),
-    }
+    handlers = {name: globals()["cmd_" + name.replace("-", "_")] for name in (
+        "init", "status", "next", "start", "finish", "pause", "resume", "rerun", "check", "compare", "export", "reconfigure", "decision-context")}
+    handlers.update(migrate=cmd_reconfigure, smoke=lambda root, args: smoke_test())
     try:
-        result = handlers[args.command](workspace, args)
-    except (WorkflowError, OSError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) and exc.stderr else str(exc)
-        print(json.dumps({"status": "FAILED", "error": detail}, ensure_ascii=False, indent=2))
-        return 1
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result.get("status") != "FAILED" else 1
-
+        result = handlers[args.command](args.workspace.resolve(), args)
+    except (OSError, ValueError, KeyError, WorkflowError, subprocess.SubprocessError) as exc:
+        result = {"status": "FAILED", "error": str(exc)}
+    print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+    return 1 if result.get("status") == "FAILED" else 0
 
 if __name__ == "__main__":
     sys.exit(main())
