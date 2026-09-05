@@ -135,6 +135,13 @@ def cmd_checkpoint(root: Path, args: argparse.Namespace) -> dict[str, Any]:
 
 def cmd_start(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
+    runtime = root / "planning/workflow_run.json"
+    experiment_id = getattr(args, "experiment_id", None)
+    if runtime.is_file():
+        active_id = json.loads(runtime.read_text(encoding="utf-8"))["iterations"][args.question.upper()]
+        if experiment_id and experiment_id != active_id:
+            raise ValueError("experiment ID differs from workflow iteration")
+        experiment_id = active_id
     name = f"exp/{slug(args.contest)}/{slug(args.question)}/{slug(args.algorithm)}"
     if run_git(root, "show-ref", "--verify", f"refs/heads/{name}", check=False).returncode == 0:
         raise RuntimeError(f"experiment branch already exists: {name}")
@@ -147,13 +154,15 @@ def cmd_start(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         root = target
     else:
         require_clean(root)
-        run_git(root, "switch", args.base)
+        if not getattr(args, "from_current", False):
+            run_git(root, "switch", args.base)
         run_git(root, "switch", "-c", name)
     context = {
         "schema_version": 1,
         "status": "active",
         "contest": args.contest,
         "question_id": args.question.upper(),
+        "experiment_id": experiment_id,
         "algorithm": args.algorithm,
         "branch": name,
         "base_branch": args.base,
@@ -167,8 +176,24 @@ def cmd_start(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     return {"status": "STARTED", **context, "context": context_path.relative_to(root).as_posix()}
 
 
+def validate_active_context(root, args):
+    summary_relative = relative_path(root, args.summary)
+    runtime_path = root / "planning/workflow_run.json"
+    if runtime_path.is_file():
+        runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+        matches = [q for q, eid in runtime["iterations"].items()
+                   if eid == args.experiment_id and summary_relative == f"results/{q}/experiments/{eid}/run_summary.json"]
+        if len(matches) != 1:
+            raise ValueError("summary directory and experiment ID must match the active workflow")
+        context = json.loads((root / f"planning/experiments/{matches[0]}/active_experiment.json").read_text(encoding="utf-8"))
+        if context.get("experiment_id") != args.experiment_id or context.get("branch") != branch(root):
+            raise ValueError("prepare the current experiment branch/context before execution")
+        run_git(root, "merge-base", "--is-ancestor", context["parent_commit"], "HEAD")
+
+
 def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
+    validate_active_context(root, args)
     summary_relative = relative_path(root, args.summary)
     summary_path = root / summary_relative
     if not summary_path.exists():
@@ -180,7 +205,7 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("run through the run command before record; missing execution receipt")
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     code_commit = execution.get("code_commit")
-    if not code_commit or receipt.get("code_commit") != code_commit or receipt.get("exit_code") != 0:
+    if not code_commit or receipt.get("code_commit") != code_commit or receipt.get("exit_code") != 0 or receipt.get("status") != "success":
         raise ValueError("invalid execution receipt")
     if summary.get("experiment_id") != args.experiment_id or receipt.get("experiment_id") != args.experiment_id:
         raise ValueError("experiment ID mismatch")
@@ -221,8 +246,27 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
+    receipt = root / relative_path(root, args.summary)
+    receipt = receipt.with_name("execution_receipt.json")
+    if receipt.exists():
+        raise ValueError("attempt already recorded; preserve it and use a fresh experiment ID/directory")
+    try:
+        return execute_run(root, args)
+    except (Exception, KeyboardInterrupt) as exc:
+        if receipt.exists():
+            data = json.loads(receipt.read_text(encoding="utf-8"))
+            data.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
+                        failure_reason=str(exc) or type(exc).__name__, finished_at=now())
+            if isinstance(exc, subprocess.TimeoutExpired):
+                data["status"] = "timeout"
+            receipt.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        raise RuntimeError(f"execution unsuccessful: {exc}; receipt: {receipt}") from exc
+
+
+def execute_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     """Execute already committed code, capture actual environment and file hashes."""
     ensure_repo(root)
+    validate_active_context(root, args)
     command = list(args.argv)
     if command and command[0] == "--":
         command.pop(0)
@@ -242,15 +286,29 @@ def cmd_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("run summary already exists; use a fresh experiment ID/directory")
     started = now()
     begin = time.monotonic()
-    proc = subprocess.run(command, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=args.timeout)
-    elapsed = time.monotonic() - begin
     receipt_path = summary_path.with_name("execution_receipt.json")
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     log = summary_path.with_name("execution.log")
-    log.write_text(proc.stdout + "\n" + proc.stderr, encoding="utf-8")
     receipt = {"schema_version": 1, "code_commit": code_commit, "experiment_id": args.experiment_id,
-               "argv": command, "started_at": started, "finished_at": now(), "exit_code": proc.returncode,
+               "argv": command, "started_at": started, "status": "running", "exit_code": None,
                "files": before, "log": log.relative_to(root).as_posix()}
+    receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+    with log.open("w", encoding="utf-8") as handle:
+        proc = subprocess.Popen(command, cwd=root, stdout=handle, stderr=subprocess.STDOUT,
+                                start_new_session=os.name != "nt")
+        try:
+            proc.wait(timeout=args.timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+            else:
+                import signal
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            raise
+    elapsed = time.monotonic() - begin
+    receipt.update(exit_code=proc.returncode, finished_at=now(), status="validating")
+    receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     if proc.returncode or not summary_path.is_file():
         receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
         raise RuntimeError(f"execution failed or no run summary; see {log}")
@@ -272,6 +330,7 @@ def cmd_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         rel = relative_path(root, raw)
         receipt["files"][rel] = hashlib.sha256((root / rel).read_bytes()).hexdigest()
     receipt["output_files"] = [summary_relative, *output_files, log.relative_to(root).as_posix()]
+    receipt["status"] = "success"
     receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"status": "EXECUTED", "code_commit": code_commit, "receipt": str(receipt_path), "summary": summary_relative}
 
@@ -395,6 +454,8 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--question", required=True)
     start.add_argument("--algorithm", required=True)
     start.add_argument("--base", default="main")
+    start.add_argument("--experiment-id")
+    start.add_argument("--from-current", action="store_true", help="branch from a committed current checkpoint, preserving workflow and rejected evidence")
     start.add_argument("--worktree", type=Path, help="optional isolated checkout; existing checkout stays in place")
 
     execute = sub.add_parser("run")

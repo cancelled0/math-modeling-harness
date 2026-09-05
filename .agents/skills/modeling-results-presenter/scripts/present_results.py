@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import hashlib
 from pathlib import Path
 
 
@@ -20,17 +21,27 @@ def resolve(root, raw):
 
 
 def locator(data, path):
+    if path == "$":
+        return data
+    if path.startswith("/"):
+        for key in path[1:].split("/"):
+            key = key.replace("~1", "/").replace("~0", "~")
+            data = data[int(key)] if isinstance(data, list) else data[key]
+        return data
     if not path.startswith("$."):
         raise ValueError("仅支持 $.key.subkey 数值定位")
     for key in path[2:].split("."):
-        data = data[key]
+        data = data[int(key)] if isinstance(data, list) else data[key]
     return data
 
 
 def validate(root, spec):
-    for key in ("question_id", "experiment_id", "title", "problem_goal", "run_summary", "assumptions", "preparation", "derivations", "model", "algorithm", "results", "conclusions", "diagnostics", "evidence_files"):
+    for key in ("question_id", "experiment_id", "title", "problem_goal", "run_summary", "preparation", "model", "algorithm", "results", "conclusions", "diagnostics", "evidence_files"):
         if not spec.get(key):
             raise ValueError(f"展示缺少内容: {key}")
+    for key in ("assumptions", "derivations"):
+        if not isinstance(spec.get(key), list) or (not spec[key] and not spec.get("omissions", {}).get(key)):
+            raise ValueError(f"{key} 必须为列表；不适用时填写 omissions.{key} 的具体原因")
     if spec.get("status") != "ready_for_review":
         raise ValueError("展示状态必须为 ready_for_review，不代表人工接受或冻结")
     run = load(resolve(root, spec["run_summary"]))
@@ -51,14 +62,30 @@ def validate(root, spec):
         resolve(root, raw)
     labels = set()
     for row in spec["results"]:
-        if not all(row.get(k) for k in ("label", "source_file", "source_locator", "unit", "meaning")) or "value" not in row:
+        if not all(row.get(k) for k in ("label", "source_file", "meaning")):
             raise ValueError("结果缺少名称、值、单位、含义或数值来源")
         if row["label"] in labels:
             raise ValueError("结果 label 重复")
         labels.add(row["label"])
+        kind = row.get("type", "number")
+        if kind in {"file", "figure", "table_file"}:
+            source = resolve(root, row["source_file"])
+            if row.get("source_sha256") != hashlib.sha256(source.read_bytes()).hexdigest():
+                raise ValueError("文件型结果缺少或不匹配 source_sha256")
+            continue
+        if kind not in {"number", "table", "sequence", "matrix", "formula", "text"}:
+            raise ValueError(f"不支持的结果类型: {kind}")
+        if not row.get("source_locator") or "value" not in row:
+            raise ValueError("结构化结果需要 source_locator 和 value")
         actual = locator(load(resolve(root, row["source_file"])), row["source_locator"])
         value = row["value"]
-        if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value) or actual != value:
+        if kind == "number" and (not row.get("unit") or isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value)):
+            raise ValueError("数值结果必须为有限数并说明单位")
+        if kind in {"table", "sequence", "matrix"} and not isinstance(value, list):
+            raise ValueError("表格/序列/矩阵应保存为 JSON 列表")
+        if kind in {"formula", "text"} and not isinstance(value, str):
+            raise ValueError("公式/文本应保存为字符串")
+        if json.dumps(actual, sort_keys=True, allow_nan=False) != json.dumps(value, sort_keys=True, allow_nan=False):
             raise ValueError(f"展示数字与来源不一致或不是有限数值: {row['label']}")
     derivations = {row["id"] for row in spec["derivations"]}
     for row in spec["conclusions"]:
@@ -73,6 +100,8 @@ def render(root, spec):
     lines = [f"# {spec['question_id']}：{spec['title']}", "", f"实验：{spec['experiment_id']}；状态：待审阅，尚未接受或冻结。", "", spec["problem_goal"], "", "## 模型假设与准备", ""]
     for a in spec["assumptions"]:
         lines.extend([f"**{a['id']}：{a['statement']}**", "", f"依据：{a['basis']}。影响：{a['impact']}。验证：{a['validation']}。", ""])
+    if not spec["assumptions"]:
+        lines.extend(["额外假设不适用：" + spec["omissions"]["assumptions"], ""])
     for row in spec["preparation"]:
         links = "、".join(f"[{Path(p).name}](<{resolve(root,p).as_posix()}>)" for p in row["evidence_files"])
         lines.extend([row["text"] + "；证据：" + links, ""])
@@ -80,12 +109,19 @@ def render(root, spec):
     lines.extend(["## 模型建立与选择依据", "", f"采用模型：{model['name']}。", "", model["rationale"], "", f"变量与单位：{model['variables']}", "", model["formulation"], "", f"约束与适用条件：{model['constraints']}", "", f"备选方法与取舍：{model['alternatives']}", "", "## 推导与中间结论", ""])
     for row in spec["derivations"]:
         lines.extend([f"### {row['id']}：{row['statement']}", "", row["derivation"], "", f"成立条件：{row['conditions']}", ""])
+    if not spec["derivations"]:
+        lines.extend(["独立推导不适用：" + spec["omissions"]["derivations"], ""])
     alg = spec["algorithm"]
     lines.extend(["## 算法与求解", "", alg["name"], ""])
     lines.extend(f"{i}. {text}" for i, text in enumerate(alg["steps"], 1))
     lines.extend(["", f"参数：{alg['parameters']}", "", f"停止条件：{alg['stopping_rule']}", "", f"复现方式：{alg['reproducibility']}", "", "## 求解结果与文件", ""])
     for row in spec["results"]:
-        lines.extend([f"- {row['label']}：{row['value']} {row['unit']}。{row['meaning']} [结果文件](<{resolve(root,row['source_file']).as_posix()}>)（{row['source_locator']}）", ""])
+        value = row.get("value", "见结果文件")
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
+        if len(str(value)) > 1200:
+            value = str(value)[:1200] + "…（完整结果见文件）"
+        lines.extend([f"- {row['label']}：{value} {row.get('unit', '')}。{row['meaning']} [结果文件](<{resolve(root,row['source_file']).as_posix()}>)（{row.get('source_locator', 'SHA256: ' + row.get('source_sha256', ''))}）", ""])
     lines.extend(["## 检验、比较与局限", ""])
     lines.extend([spec["diagnostics"][k] + "\n" for k in ("baseline_comparison", "robustness", "limitations")])
     lines.extend(["## 对本问的结论", ""])

@@ -41,7 +41,7 @@ results/Qx/experiments/roundN/
 └── run_summary.json
 ```
 
-Create `logs/` only for failures, warnings, or reproducibility needs.
+Use the actual workflow experiment ID instead of literal roundN. The runner always saves execution.log and execution_receipt.json, including unsuccessful attempts.
 7. Write `code/Qx/qx_code_plan.md` for Python or `code/matlab/Qx/qx_code_plan.md` for MATLAB.
 8. Hand off to the matching language generator.
 
@@ -52,7 +52,10 @@ Require:
 ```json
 {
   "schema_version": 1,
-  "question": "Q1",
+  "question_id": "Q1",
+  "status": "pending",
+  "task_type": "regression",
+  "evaluation_audit_file": "results/Q1/experiments/<active-id>/evaluation_audit.json",
   "round": "round1",
   "implementation_target": "python",
   "random_seed": 2026,
@@ -100,6 +103,8 @@ Require:
 ```
 
 # Code Plan Contents
+
+Execution order: explicit code checkpoint → `experiment_git.py run` → code review → `record`. The runner fills execution.code_commit and execution.receipt_file. Read [scientific evidence](../workflow-orchestrator/references/scientific-evidence.md) for actual split/constraint checks; preserve review versus computed evidence distinctions.
 
 - target language and round purpose;
 - approved decision ID;

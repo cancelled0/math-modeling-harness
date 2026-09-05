@@ -26,7 +26,11 @@ Use `planning/framing_decisions.jsonl` for global/pre-Qx framing decisions.
   "decided_by": "human",
   "captured_in_mode": "learning",
   "choice": "M2",
-  "rationale": "Human-authored reason tied to evidence.",
+  "user_message": "用户明确选择的原话",
+  "rationale": null,
+  "experiment_id": "当前实验编号；全局判断为 null",
+  "selected_method": "仅方法选择填写用户选定的方法 ID",
+  "evidence_hashes": {"实际证据相对路径": "由 decision-context 计算的 SHA256"},
   "evidence_refs": ["methods/Q1/probes/risk_probe_summary.json"],
   "decided_at": "ISO-8601",
   "supersedes": null
@@ -37,17 +41,17 @@ Optional structured fields may include confidence, rejected alternatives, round 
 
 # Workflow
 
-1. Receive the human's answer, the choice-card ID, and evidence paths.
+1. Receive the human's answer, the choice-card ID, and evidence paths. Prefer `workflow.py record-decision --question Qx --step <checkpoint> --choice <choice> --user-message <actual answer>`; for method choice supply `--selected-method`. It captures current hashes and experiment ID automatically. Use structured subprocess arguments for user text, never interpolate it as shell code.
 2. Preserve the user's meaning and wording. Normalize only structure, identifiers, and whitespace.
 3. Verify:
    - the choice is one of the presented options or explicitly records a user-supplied alternative;
    - evidence paths exist;
-   - rationale is non-empty and contains no placeholder;
+   - rationale preserves an explicitly supplied reason, or is null when the user simply agrees; do not ask for a reason solely to fill this field;
    - the record does not falsely label AI-authored prose as human-authored.
 4. Append one JSON line.
 5. If revising a decision, append a new record with `supersedes`; never overwrite history.
 6. Update the compact history in `qx_method_card.md` only when the decision changes method state.
-7. Update the manifest gate/status fields when present.
+7. Return to the orchestrator's start/finish validation; do not directly edit manifest gate/status fields.
 
 # Decision Types
 

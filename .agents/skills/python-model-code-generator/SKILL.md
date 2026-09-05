@@ -32,9 +32,9 @@ Legacy method pools and `code/model-code-analyzer.md` may be read during migrati
    - Git experiment ID, branch/parent context, data/split/feature/metric hashes and structured primary metric required for comparable versioned experiments.
 6. Evaluate and record output-degeneracy and fallback-trigger metrics required by the plan.
 7. Persist full logs only on failure or when a warning needs reproduction.
-8. Run the code. Do not claim success from code generation alone.
+8. Read the active experiment ID from `planning/workflow_run.json` and use it in the result directory. Commit explicit code/config paths with `git-experiment-manager checkpoint` BEFORE execution, then use `experiment_git.py run --experiment-id <id> --summary results/Qx/experiments/<id>/run_summary.json --code-paths <files> --inputs <files> -- <actual command>`. The runner saves the execution receipt and log.
 9. Hand off to `code-reviewer`.
-10. After reviewable outputs exist, use `git-experiment-manager` to bind the code commit and evidence commit; do not stage unrelated files.
+10. Use `git-experiment-manager record` to save receipt and reviewed evidence. Changed code requires a new checkpoint and fresh attempt; never relabel old results with a later commit.
 
 # Script Layout
 

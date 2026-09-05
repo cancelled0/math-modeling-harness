@@ -45,7 +45,14 @@ contract = {"question_id":q,"data_hash":h(data_file.read_bytes()),"split_hash":h
 methods = [{"method_id":name,"role":role,"status":"success","metrics_summary":{"rmse":value},"output_files":[rel],"degeneracy_check":{"status":"passed","reason":"slope nonzero; predictions vary"}} for name,role,value in [("ols","main",main),("mean","usable_baseline",baseline)]]
 task = "regression" if q == "Q1" else "forecasting"
 checks = ["heldout_evaluation"] if q == "Q1" else ["temporal_split","availability_time"]
+audit = folder / "evaluation_audit.json"
+fold = {"train_ids":list(range(12)), "evaluation_ids":list(range(12,20)), "preprocessing":"none", "no_preprocessing_reason":"OLS on original x without learned transforms"}
+if q == "Q2":
+    fold.update(target_times={str(i):f"2026-01-{i+1:02d}T00:00:00+00:00" for i in range(20)}, prediction_origins={str(i):"2026-01-12T12:00:00+00:00" for i in range(12,20)}, feature_available_at={str(i):"2026-01-01T00:00:00+00:00" for i in range(12,20)})
+audit.write_text(json.dumps({"folds":[fold]}))
 summary = {"schema_version":1,"status":"PASSED","question_id":q,"experiment_id":experiment,"random_seed":2026,"task_type":task,"feasible":True,"primary_metric":{"name":"rmse","value":main,"direction":"minimize"},"methods":methods,"comparison_contract":contract,"split":{"strategy":"temporal"},"preprocessing":{"fit_scope":"train"},"scientific_checks":{key:{"status":"passed","evidence_files":[rel]} for key in checks},"input_files":["workspace/data/clean.csv"],"fallback_trigger":{"triggered":False}}
+summary["evaluation_audit_file"] = audit.relative_to(root).as_posix()
+methods[0]["output_files"].append(summary["evaluation_audit_file"])
 (folder / "run_summary.json").write_text(json.dumps(summary,indent=2))
 '''
 
@@ -126,7 +133,7 @@ def produce(root, action, choice="accept"):
         branch = w.git_context(root)["branch"]
         if not branch.startswith("exp/"):
             cli(root, GIT_SCRIPT, "--workspace", str(root), "start", "--contest", "smoke", "--question", q, "--algorithm", "ols")
-        json_file(root, out[0], {"branch": w.git_context(root)["branch"], "parent_commit": w.git_context(root)["commit"], "question_id": q})
+        json_file(root, out[0], {"branch": w.git_context(root)["branch"], "parent_commit": w.git_context(root)["commit"], "question_id": q, "experiment_id": iteration})
     elif sid == "model-foundations":
         json_file(root, out[0], {"assumptions": ["linear conditional mean"], "symbols": {"x": "input", "y": "response"}, "preparation": ["fixed training/test split"], "derivations": ["OLS normal equations"]})
     elif sid == "code-plan":

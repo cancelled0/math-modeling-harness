@@ -17,7 +17,7 @@ description: 用 Git 为数学建模算法实验建立稳定快照、实验分�
 
 1. 在稳定分支保存当前可复现 checkpoint。
 2. 创建 `exp/<contest>/<Qx>/<algorithm>` 分支；名称冲突时增加短序号，不覆盖旧实验。
-3. 实现并运行实验，把 commit、父 commit、数据/划分/特征/指标哈希、随机种子和环境写入 `run_summary.json` 与 `planning/experiment_registry.jsonl`。
+3. 实现后先 checkpoint 提交明确的代码与配置，再通过 `run` 执行实际命令，审查后 `record` 保存证据。执行器在运行前写收据、运行中保存日志；失败、超时与中断均保留状态，重试使用新实验编号/目录。
 4. 只有比较契约一致时运行结果对比并允许“更优/更差”的结论。
 5. 人工接受后以非快进合并回稳定分支；人工拒绝时保留分支与结果记录并切回稳定分支。
 6. 已合并方案需要恢复时使用 `git revert` 留下历史，不使用 `git reset --hard`。
@@ -30,6 +30,8 @@ description: 用 Git 为数学建模算法实验建立稳定快照、实验分�
 - 冻结后的算法变更必须先记录解冻，并让 `workflow-orchestrator` 将受影响步骤标记为 stale。
 
 ## 交接
+
+正式工作区的实验编号来自 workflow_run.json；start 自动写入相同编号，run/record 检查编号、结果目录、当前分支与父提交。重跑使用 `workflow.py rerun --question Qx --from-step <诊断步骤> --new-experiment`，执行层重跑会重新经过 git-experiment。先显式 checkpoint 当前实验代码、证据及工作流控制文件，再用带新编号的算法分支名和 `start --from-current --base main` 创建后继分支，保留已有决定和旧结果。继承 checkpoint 不代表接受旧方案；若要从稳定算法重新开始，应明确选择稳定代码来源并保留当前工作流记录。不得只改上下文字段来假装切换分支。
 
 - 分支建立后交给 `model-code-analyzer` 或被诊断出的数据/特征/实现 Skill。
 - 实验完成后交给 `result-report-generator` 与 `compare_experiments.py`。

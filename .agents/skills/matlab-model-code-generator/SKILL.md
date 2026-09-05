@@ -25,9 +25,9 @@ Legacy artifacts may be read during migration but do not override the human deci
    Include Git experiment ID, branch/parent context, data/split/feature/metric hashes and a structured primary metric.
 6. Evaluate output-degeneracy and fallback-trigger metrics required by the plan.
 7. Use `diary` or another full log only for a failure or reproducibility warning.
-8. Run in the available compatible runtime. If unavailable, report the unexecuted state explicitly.
+8. Read the active experiment ID from `planning/workflow_run.json` and use it in the result directory. Commit explicit `.m` and config paths with `git-experiment-manager checkpoint` BEFORE execution, then use `experiment_git.py run --experiment-id <id> --summary results/Qx/experiments/<id>/run_summary.json --code-paths <files> --inputs <files> -- <actual MATLAB/北太天元 command>`. The runner saves receipt and log. If the runtime is unavailable, report the unexecuted state explicitly.
 9. Hand off to `code-reviewer`.
-10. Bind the reviewed code and evidence to Git through `git-experiment-manager`; do not stage unrelated files.
+10. Use `git-experiment-manager record` to save receipt and reviewed evidence. Changed code requires a new checkpoint and fresh attempt; never relabel old results with a later commit.
 
 # Script Layout
 

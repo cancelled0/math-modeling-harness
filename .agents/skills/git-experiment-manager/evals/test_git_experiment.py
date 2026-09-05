@@ -216,6 +216,29 @@ path.write_text(json.dumps({
         result = self.call(COMPARE_SCRIPT, str(left_path), str(right_path), expected=1)
         self.assertEqual(result["status"], "FAILED")
 
+    def test_timeout_preserves_log_receipt_and_refuses_overwrite(self) -> None:
+        code = self.root / "slow.py"
+        code.write_text("import time\nprint('started', flush=True)\ntime.sleep(30)\n")
+        self.call(GIT_SCRIPT, "--workspace", str(self.root), "checkpoint", "--question", "Q1",
+                  "--message", "test slow code", "--paths", "slow.py")
+        argv = ("--workspace", str(self.root), "run", "--experiment-id", "timeout1", "--summary",
+                "results/Q1/experiments/timeout1/run_summary.json", "--code-paths", "slow.py", "--timeout", "1", "--", sys.executable, "slow.py")
+        self.call(GIT_SCRIPT, *argv, expected=1)
+        receipt = self.root / "results/Q1/experiments/timeout1/execution_receipt.json"
+        before = receipt.read_bytes()
+        self.assertEqual(json.loads(before)["status"], "timeout")
+        self.assertIn("started", receipt.with_name("execution.log").read_text())
+        self.call(GIT_SCRIPT, *argv, expected=1)
+        self.assertEqual(receipt.read_bytes(), before)
+
+    def test_failed_launch_preserves_receipt(self) -> None:
+        self.call(GIT_SCRIPT, "--workspace", str(self.root), "run", "--experiment-id", "bad",
+                  "--summary", "attempt/run_summary.json", "--code-paths", "baseline.txt", "--",
+                  "nonexistent-model-runtime-xyz", expected=1)
+        receipt = json.loads((self.root / "attempt/execution_receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["status"], "failed")
+        self.assertTrue(receipt["failure_reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

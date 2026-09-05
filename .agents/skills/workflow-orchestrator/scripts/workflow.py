@@ -429,6 +429,11 @@ def cmd_rerun(root, args):
         key = f"GLOBAL:{args.from_step}"
     if key not in nodes:
         raise WorkflowError("unknown active rerun step")
+    diagnostic_root = key
+    if getattr(args, "new_experiment", False):
+        git_key = f"{q}:git-experiment"
+        if git_key in nodes and list(nodes).index(key) > list(nodes).index(git_key):
+            key = git_key
     affected = {key}
     for node, step in nodes.items():
         if any(d in affected for d in step["dependencies"]):
@@ -447,7 +452,7 @@ def cmd_rerun(root, args):
         save_manifest(root, manifest)
     run["status"] = "running"
     write_json(runtime_paths(root)["run"], run)
-    record_event(root, "rerun", rerun_root=key, affected=sorted(affected))
+    record_event(root, "rerun", rerun_root=key, diagnostic_root=diagnostic_root, affected=sorted(affected))
     return {"status": "STALE", "affected": sorted(affected), "next": cmd_next(root, argparse.Namespace(question=q))}
 
 def cmd_pause(root, args):
@@ -531,6 +536,32 @@ def cmd_decision_context(root, args):
     return {"status": "READY", "step": step["id"], "checkpoint": step.get("checkpoint"),
             "experiment_id": run["iterations"].get(step["question_id"]), "evidence_hashes": binding(root, step, graph(root, run, template))}
 
+def cmd_record_decision(root, args):
+    """Capture an explicit user answer against current evidence, without inventing reasons."""
+    run, template = load_runtime(root)
+    _, step = resolve_step(root, run, template, normalize_question(args.question), args.step)
+    checkpoint = step.get("checkpoint")
+    if not checkpoint or not args.user_message.strip():
+        raise WorkflowError("a ready checkpoint and actual user message are required")
+    if step["id"] == "method-choice":
+        if not args.selected_method:
+            raise WorkflowError("record the method explicitly selected by the user")
+    elif args.choice not in checkpoint.get("choices", []):
+        raise WorkflowError("choice is not supported by this checkpoint")
+    q = step["question_id"]
+    path = root / render(checkpoint.get("decision_file", f"methods/{q}/{q.lower()}_decisions.jsonl"), q)
+    previous = decision_for(root, step)
+    row = {"schema_version": 1, "decision_id": f"{q}-{step['id']}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}",
+           "decision_type": checkpoint["decision_type"], "status": "DECIDED", "decided_by": "human",
+           "choice": args.choice, "user_message": args.user_message, "rationale": args.rationale,
+           "selected_method": args.selected_method, "experiment_id": run["iterations"].get(q),
+           "evidence_hashes": binding(root, step, graph(root, run, template)), "decided_at": now(),
+           "supersedes": previous.get("decision_id") if previous else None}
+    if args.rerun_from:
+        row["rerun_from"] = args.rerun_from
+    append_jsonl(path, row)
+    return {"status": "RECORDED", "decision": row, "path": str(path)}
+
 def smoke_test():
     from smoke_case import run_smoke
     return run_smoke()
@@ -584,6 +615,14 @@ def build_parser():
         cmd = sub.add_parser(name)
         cmd.add_argument("--question", required=True)
         cmd.add_argument("--step")
+    decision = sub.add_parser("record-decision")
+    decision.add_argument("--question", required=True)
+    decision.add_argument("--step", required=True)
+    decision.add_argument("--choice", required=True)
+    decision.add_argument("--user-message", required=True)
+    decision.add_argument("--rationale", default=None)
+    decision.add_argument("--selected-method")
+    decision.add_argument("--rerun-from", choices=("data-audit", "feature-engineering", "method-screen", "code-plan", "model-run"))
     sub.add_parser("pause").add_argument("--reason", required=True)
     for name in ("resume", "check", "migrate", "reconfigure", "smoke"):
         sub.add_parser(name)
@@ -603,7 +642,7 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
     handlers = {name: globals()["cmd_" + name.replace("-", "_")] for name in (
-        "init", "status", "next", "start", "finish", "pause", "resume", "rerun", "check", "compare", "export", "reconfigure", "decision-context")}
+        "init", "status", "next", "start", "finish", "pause", "resume", "rerun", "check", "compare", "export", "reconfigure", "decision-context", "record-decision")}
     handlers.update(migrate=cmd_reconfigure, smoke=lambda root, args: smoke_test())
     try:
         result = handlers[args.command](args.workspace.resolve(), args)

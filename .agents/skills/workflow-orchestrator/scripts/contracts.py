@@ -6,6 +6,7 @@ import json
 import math
 import subprocess
 import sys
+from scientific_evidence import verify as verify_scientific_evidence
 from pathlib import Path
 
 CHECKS = Path(__file__).parent / "checks"
@@ -33,7 +34,7 @@ def referenced_files(value):
     result = []
     if isinstance(value, dict):
         for key, item in value.items():
-            if key in {"source_file", "local_path", "result_file", "run_summary", "receipt_file"} and isinstance(item, str):
+            if key in {"source_file", "local_path", "result_file", "run_summary", "receipt_file", "evaluation_audit_file", "constraint_audit_file"} and isinstance(item, str):
                 result.append(item)
             elif key in {"input_files", "output_files", "evidence_files"} and isinstance(item, list):
                 result.extend(x for x in item if isinstance(x, str))
@@ -62,7 +63,7 @@ def fingerprints(root, paths):
         elif path.is_file():
             found[name] = digest(path)
             if path.suffix == ".json":
-                pending.extend(referenced_files(load(path)))
+                pending.extend(referenced_files(json.loads(path.read_text(encoding="utf-8-sig"))))
         else:
             found[name] = None
     return dict(sorted(found.items()))
@@ -129,7 +130,7 @@ def scientific_errors(root, data):
     else:
         try:
             receipt = load(inside(root, receipt_raw))
-            if receipt.get("exit_code") != 0 or receipt.get("code_commit") != data["execution"]["code_commit"]:
+            if receipt.get("exit_code") != 0 or receipt.get("status") != "success" or receipt.get("code_commit") != data["execution"]["code_commit"] or receipt.get("experiment_id") != data.get("experiment_id"):
                 errors.append("execution receipt is inconsistent")
             for raw, expected in receipt.get("files", {}).items():
                 if digest(inside(root, raw)) != expected:
@@ -152,10 +153,16 @@ def scientific_errors(root, data):
         if not required:
             errors.append("task_type requires an explicit nonempty required_checks contract")
     checks = data.get("scientific_checks", {})
+    errors.extend(verify_scientific_evidence(root, data))
     for key in required or []:
         check = checks.get(key, {})
         if check.get("status") != "passed" or not check.get("evidence_files"):
             errors.append(f"scientific check lacks passing evidence: {key}")
+        if key not in {"heldout_evaluation", "temporal_split", "availability_time", "constraint_residuals", "feasibility"}:
+            if check.get("verification_mode") not in {"computed", "model_review", "human_review"}:
+                errors.append(f"check must disclose computed or reviewed evidence: {key}")
+            elif check["verification_mode"] != "computed" and not all(check.get(k) for k in ("reviewer", "rationale")):
+                errors.append(f"review check needs reviewer and rationale: {key}")
     for method in data.get("methods", []):
         if method.get("degeneracy_check", {}).get("status") != "passed":
             errors.append("method output degeneracy must be checked")
@@ -236,6 +243,12 @@ def execute(root, step, config):
             context = load(root / outputs[0])
             if not context.get("branch", "").startswith("exp/") or not context.get("parent_commit"):
                 errors.append("missing experiment branch and base commit")
+            runtime = load(root / "planning/workflow_run.json")
+            current = subprocess.run(["git", "branch", "--show-current"], cwd=root, capture_output=True, text=True)
+            if context.get("question_id") != q or context.get("experiment_id") != runtime["iterations"].get(q) or current.returncode or current.stdout.strip() != context.get("branch"):
+                errors.append("experiment context does not match question, iteration or current branch")
+            if context.get("parent_commit") and subprocess.run(["git", "merge-base", "--is-ancestor", context["parent_commit"], "HEAD"], cwd=root, capture_output=True).returncode:
+                errors.append("experiment parent commit is not an ancestor of current code")
             continue
         if name == "evidence_check":
             errors.extend(evidence_errors(root, load(root / outputs[0])))
