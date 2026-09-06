@@ -1,0 +1,166 @@
+flowchart TD
+    U[用户提出数学建模任务] --> M[math-modeling-manager<br/>识别意图、工作区和当前阶段]
+    M --> MODE{选择运行模式}
+
+    MODE -->|只讨论、评价方案、暂不写代码| D0[modeling-thought-partner]
+    D0 --> D1[适时追问<br/>直接评价思路、漏洞和替代方向]
+    D1 -->|仍在讨论| D0
+    D1 -->|用户明确正式开始、采用或实现| INIT
+
+    MODE -->|局部实验、学习、临时分析| LEAN[Lean 流程]
+    MODE -->|完整赛题、持续求解、正式提交| SUB[Submission 流程]
+    MODE -->|明确的单项任务| SINGLE[直接调用对应专业 Skill]
+    SINGLE --> REFRESH[workflow-orchestrator<br/>刷新状态与产物索引]
+
+    LEAN --> INIT
+    SUB --> INIT
+
+    subgraph S0["S0：初始化、环境和版本控制"]
+        INIT[workflow.py init<br/>创建最小会话与每问 manifest]
+        INIT --> ENV[检查 Git、Python／MATLAB、<br/>XeLaTeX、Pandoc、字体和依赖]
+        ENV --> G0([G0：会话初始化完成])
+    end
+
+    subgraph S1["S1：题目理解与抽象"]
+        G0 --> PARSE[problem-parser<br/>目标、对象、数据、约束、输出、子问依赖]
+        PARSE --> CLASSIFY[problem-classifier<br/>识别预测、评价、优化、统计等任务类型]
+        CLASSIFY -.需要时.-> SYMBOL[symbol-table-builder<br/>统一符号和单位]
+        CLASSIFY -.需要时.-> ASSUME[model-assumptions-builder<br/>建立可检验假设]
+        CLASSIFY --> AMBIG{题意或成功标准<br/>存在重大歧义？}
+        AMBIG -->|是| H1[[人工判断 ①<br/>确定题意与成功标准]]
+        H1 --> LOG1[modeler-decision-logger<br/>记录人类决定]
+        LOG1 --> CLASSIFY
+        AMBIG -->|否| PROFILE{当前 Profile}
+    end
+
+    subgraph S2["S2：学术证据、数据与特征"]
+        PROFILE -->|Submission| EVIDENCE[modeling-evidence-collector<br/>规划学术证据与外部数据需求]
+        PROFILE -->|Lean| DATA
+
+        EVIDENCE -.论文检索.-> LOOKUP[paper-lookup]
+        LOOKUP --> ANALYZE[related-paper-analyzer<br/>提取方法、假设、适用性和局限]
+        ANALYZE --> BRIEF[形成 evidence brief]
+
+        EVIDENCE -.外部数据／标准／公报.-> SOURCE[来源登记<br/>网址、日期、许可、范围、哈希]
+        SOURCE --> DATA[data-auditor-cleaner<br/>数据盘点、质量审计和清洗]
+        BRIEF --> DATA
+        EVIDENCE --> DATA
+
+        DATA --> FEATURE{是否需要特征、指标体系、<br/>变量筛选或参数约简？}
+        FEATURE -->|是| FE[feature-engineering<br/>防泄漏构造、VIF、CV、消融、稳定性]
+        FEATURE -->|否| G1
+        FE --> G1([G1：问题、证据和数据就绪])
+
+        G1 --> DISCUSS{是否需要与用户<br/>讨论建模思路？}
+        DISCUSS -->|是| ED[modeling-thought-partner<br/>读取题意、数据概况和证据摘要]
+        ED --> METHOD
+        DISCUSS -->|否| METHOD
+    end
+
+    subgraph S3["S3：方法筛选与确认"]
+        METHOD[method-selector<br/>主候选 + 可用基线 + 最多一个条件备选]
+        METHOD --> PROBE[执行有界风险探针<br/>检查规模、假设、数据和可行性]
+        PROBE --> G2([G2：候选方法与基线形成])
+        G2 --> H2[[人工判断 ②<br/>最终方法与基线选择]]
+        H2 --> LOG2[记录 method_choice]
+        LOG2 --> G25([G2.5：人类方法决定有效])
+    end
+
+    subgraph S4["S4：Git 实验、代码实现与审查"]
+        G25 --> GIT[git-experiment-manager<br/>保存稳定 checkpoint]
+        GIT --> BRANCH[创建实验分支<br/>exp/contest/Qx/algorithm]
+        BRANCH --> SPECIAL{是否需要专业算法 Skill？}
+
+        SPECIAL -->|是| MS[调用已确认的方法能力<br/>预测／优化／统计／图网络／仿真等]
+        SPECIAL -->|否或无专门 Skill| PLAN
+        MS --> PLAN[model-code-analyzer<br/>生成语言无关代码与实验契约]
+
+        PLAN --> LANG{实现语言}
+        LANG -->|默认 Python| PY[python-model-code-generator]
+        LANG -->|指定 MATLAB／北太天元| MATLAB[matlab-model-code-generator]
+
+        PY --> RUN[实际运行主方法和真实基线]
+        MATLAB --> RUN
+        RUN --> SUMMARY[run_summary.json<br/>记录 Git、数据、划分、特征、指标哈希与随机种子]
+        SUMMARY --> REVIEW[code-reviewer → 语言审查器<br/>检查实现、泄漏、可复现性、可行性和退化]
+        REVIEW --> G3([G3：实现与代码审查通过])
+    end
+
+    subgraph S5["S5：效果评估、诊断与改进"]
+        G3 --> REPORT[result-report-generator<br/>主方法与基线同口径比较]
+        REPORT --> CAUSE[归因：数据／特征／方法／<br/>参数／实现／指标]
+        CAUSE --> H3[[人工判断 ③<br/>接受、调整或启用备选]]
+
+        H3 -->|接受| MERGE[接受实验方案<br/>合并到稳定分支]
+        H3 -->|调整| TARGET{确定需要修复的层}
+        H3 -->|拒绝| REJECT[保留失败分支和证据<br/>返回稳定版本]
+        H3 -->|启用备选算法| NEWBRANCH[创建新的 Git 实验分支]
+
+        TARGET -->|数据| DATA
+        TARGET -->|特征| FE
+        TARGET -->|方法或指标| METHOD
+        TARGET -->|参数| MS
+        TARGET -->|实现| PLAN
+        NEWBRANCH --> PLAN
+        REJECT --> METHOD
+
+        MERGE --> ROBUST[robustness-checker<br/>敏感性、消融、扰动、重采样、误差和不确定性]
+        ROBUST --> LEANEND{当前 Profile}
+        LEANEND -->|Lean| LEND([Lean 任务结束于 G4<br/>保留实验与鲁棒性证据])
+        LEANEND -->|Submission| PREP[final-method-explainer<br/>图表规划与验证图件]
+
+        PREP --> PACKAGE[solution-package-builder<br/>准备写作包、数值来源和声明范围]
+        PACKAGE --> H4[[人工判断 ④<br/>数值冻结与论文声明范围]]
+        H4 --> LOG4[记录 package_signoff]
+        LOG4 --> FREEZE[frozen_numbers.json<br/>冻结数值和来源]
+        FREEZE --> G4([G4：结果与写作证据冻结])
+    end
+
+    subgraph S6["S6：论文写作与双格式交付"]
+        G4 --> SECTION[paper-section-writer<br/>只依据写作包、冻结数字、决定和验证图表]
+        SECTION --> REFS[reference-manager<br/>核验引用与 BibTeX]
+        REFS --> POLISH[paper-polisher<br/>语言、公式、限定语和格式润色]
+        POLISH --> FORMAT{论文语言与主格式}
+
+        FORMAT -->|中文 LaTeX，默认| ZHTEX[latex-paper-zh<br/>组装唯一权威源 paper/main.tex]
+        ZHTEX --> PDFBUILD[XeLaTeX 编译<br/>生成 main.pdf 和构建报告]
+        PDFBUILD --> PDFCHECK[PDF 日志、引用和逐页渲染检查]
+        PDFCHECK --> DELIVERY{delivery_mode}
+
+        DELIVERY -->|single| G5
+        DELIVERY -->|latex_primary_docx_mirror| DOCX[Pandoc 从当前 TeX 源包<br/>派生 paper/exports/main.docx]
+        DOCX --> DOCXCHECK[核对 OOXML、正文、公式、图表、<br/>源文件包哈希和 DOCX 哈希]
+        DOCXCHECK --> VISUAL[Word／LibreOffice 逐页视觉检查]
+        VISUAL --> G5([G5：论文和全部交付格式就绪])
+
+        FORMAT -->|英文 LaTeX| ENTEX[latex-paper-en]
+        ENTEX --> G5
+
+        FORMAT -->|显式 Word 主格式| WORDBUILD[独立 Word 主稿与 PDF 验证]
+        WORDBUILD --> G5
+
+        FORMAT -->|显式 Markdown| MDBUILD[Markdown 主稿与 PDF 验证]
+        MDBUILD --> G5
+
+        OVERLEAF[人工在 Overleaf 修改] -.同步回本地 TeX.-> SYNC[Git 提交修改]
+        SYNC -.重新编译与导出.-> ZHTEX
+        WORDCHANGE[人工在 Word 中提出修改] -.不得直接覆盖.-> SYNC
+    end
+
+    subgraph S7["S7：最终审计与发布"]
+        G5 --> CONSISTENCY[consistency-auditor<br/>数字、符号、参数、图表和跨格式一致性]
+        CONSISTENCY --> COMPLETE[completeness-auditor<br/>检查证据和必需产物]
+        COMPLETE --> QA[quality-assurance-auditor<br/>反虚构、论文逻辑、格式和交付质量]
+        QA --> PASS{全部通过？}
+        PASS -->|否| REPAIR[定位受影响层并局部重跑]
+        REPAIR --> CAUSE
+        PASS -->|是| G6([G6：最终提交质量门通过])
+        G6 --> RELEASE[创建 release commit／tag<br/>导出 TeX 源包、PDF、DOCX 和审计证据]
+    end
+
+    classDef human fill:#ffe0e0,stroke:#b71c1c,stroke-width:2px;
+    classDef gate fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
+    classDef git fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    class H1,H2,H3,H4 human;
+    class G0,G1,G2,G25,G3,G4,G5,G6,LEND gate;
+    class GIT,BRANCH,MERGE,REJECT,NEWBRANCH,SYNC,RELEASE git;

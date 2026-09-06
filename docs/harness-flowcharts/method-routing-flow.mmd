@@ -1,0 +1,17 @@
+flowchart LR
+    M[人工确认的方法族] --> A{问题结构}
+
+    A -->|评价、排名、指标体系| A1[feature-engineering<br/>statsmodels]
+    A -->|单序列预测| A2[forecasting-single-series<br/>statsmodels／scikit-learn]
+    A -->|统计推断、计量| A3[statistical-analysis<br/>statsmodels]
+    A -->|分类、回归、聚类| A4[scikit-learn<br/>验证后才使用 SHAP]
+    A -->|LP／MILP／QP| A5[cuopt-numerical-optimization-formulation]
+    A -->|多目标优化| A6[pymoo]
+    A -->|图、路径、流、网络| A7[networkx]
+    A -->|离散事件与排队仿真| A8[simpy]
+    A -->|空间数据| A9[geopandas]
+    A -->|机理、方程、符号推导| A10[sympy]
+    A -->|贝叶斯或层次不确定性| A11[pymc]
+    A -->|实验尚未采集数据| A12[experimental-design<br/>statistical-power]
+    A -->|单位与误差传播| A13[uncertainty-and-units]
+    A -->|无专门 Skill| A14[method-selector 定义契约<br/>代码生成器实现]

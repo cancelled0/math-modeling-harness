@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "contest_profile": "CUMCM",
+  "rigor_profile": "submission",
+  "interaction_mode": "speed",
+  "conversation_modes": ["discussion", "lean", "submission"],
+  "execution_policy": {
+    "mechanical_steps": "auto",
+    "human_decisions": [
+      "material_framing_ambiguity",
+      "final_method_choice",
+      "result_accept_adjust_or_fallback",
+      "number_freeze_and_claim_scope"
+    ]
+  },
+  "implementation_language": "auto",
+  "paper_language": "zh-CN",
+  "paper_format": "latex",
+  "latex_engine": "xelatex",
+  "delivery_mode": "latex_primary_docx_mirror",
+  "canonical_paper_source": "paper/main.tex",
+  "docx_mirror": "paper/exports/main.docx",
+  "docx_reference_template": null,
+  "paper_format_fallback": "word",
+  "evidence_policy": {
+    "academic_scan_before_method_discussion": true,
+    "source_priority": [
+      "same-domain-academic-and-official",
+      "same-structure-adjacent-academic",
+      "similar-contest-solution-inspiration-only"
+    ],
+    "sufficiency_dimensions": ["mechanism", "method_applicability", "validation_and_baseline", "data_or_parameters"]
+  },
+  "version_control": {
+    "enabled": true,
+    "stable_branch": "main",
+    "experiment_branch_pattern": "exp/<contest>/<Qx>/<algorithm>",
+    "rollback_strategy": "git-revert",
+    "commit_unrelated_changes": false
+  },
+  "random_seed": 2026,
+  "active_questions": [],
+  "notes": []
+}

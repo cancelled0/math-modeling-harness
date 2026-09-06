@@ -1,0 +1,51 @@
+# Local reference archives: useful to the agent, too large for the harness repository.
+/往年论文/
+/往年题/
+
+# IDE, Python and operating-system noise.
+**/.idea/
+**/.vscode/
+**/__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and local credentials.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+*secrets*.json
+
+# Raw/external contest data and large reproducible artifacts.
+**/workspace/data_raw/
+**/workspace/cache/
+**/workspace/data/external/
+**/results/**/models/
+**/results/**/large_artifacts/
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+
+# LaTeX build intermediates. Source, bibliography and final PDF remain trackable.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+
+# Harness runtime locks and temporary files.
+*.tmp
+*.lock
+

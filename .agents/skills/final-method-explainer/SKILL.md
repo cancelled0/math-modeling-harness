@@ -1,0 +1,63 @@
+---
+name: final-method-explainer
+description: Build the authoritative final method explanation for a submission-ready subquestion from the method card, human decision ledger, code plan, final results, and robustness evidence.
+---
+
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
+# Purpose
+
+Explain the selected method completely without re-authoring why the human chose it.
+
+# Preconditions
+
+- `rigor_profile` is `submission` or writer handoff is explicitly requested.
+- Human method choice and result verdicts are recorded in `qx_decisions.jsonl`.
+- Approved code ran and final result/robustness evidence exists.
+
+# Sources
+
+Use:
+
+- `qx_method_card.md`
+- `qx_decisions.jsonl`
+- `methods/Qx/qx_foundations.json` (assumptions, symbols, preparation and derivations)
+- accepted experiment's `presentation.json` and `presentation.md`
+- `qx_code_plan.md`
+- final run summary and result analysis
+- robustness summary/report
+
+Read legacy candidate and iteration logs only for migration.
+
+# Workflow
+
+1. Resolve the final method and baseline from the latest non-stale human decisions.
+2. Cite the selection decision_id; transcribe a user-supplied rationale when present. Apply project AGENTS.md for absent rationale and AI analysis provenance.
+3. Explain:
+   - goal and scope;
+   - assumptions, including evidence-backed necessity labels and their provenance;
+   - symbols and units;
+   - mathematical formulation;
+   - inputs, outputs, objective/criteria, and constraints;
+   - solution procedure;
+   - baseline and why it is valid;
+   - fallback trigger and whether it fired;
+   - validation, robustness, limitations, and applicable range.
+4. Ensure formulas match code and symbol table.
+5. Save `methods/Qx/qx_final_method_explanation.md`.
+
+# Rules
+
+- Do not infer the chosen method from best metrics.
+- Explain the method rationale from evidence and the user's actual adoption; never invent human-authored reasons. AI-originated explanation is allowed within the accepted scope.
+- Do not create a new pending decision artifact.
+- Do not restate a long iteration diary; include only material eliminated alternatives and evidence.
+- Do not include unsupported numerical claims.
+
+# Verification
+
+- Final method and rationale trace to decision IDs.
+- Assumptions, symbols, formulas, units, and code agree.
+- Baseline is usable rather than merely diagnostic.
+- Risks, fallback behavior, and limitations are explicit.
+- The explanation is self-contained enough for the writer.

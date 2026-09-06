@@ -1,0 +1,89 @@
+---
+name: python-model-code-generator
+description: Generate and run minimal reproducible Python modeling code for the human-approved main method and usable baseline, saving compact experiment artifacts and a canonical run summary.
+---
+
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
+# Preconditions
+
+- G2.5 human method choice is recorded in `methods/Qx/qx_decisions.jsonl`.
+- `code/Qx/qx_code_plan.md` exists.
+- Required cleaned data and profile exist.
+- Required feature spec/audit exists when referenced by the code plan.
+- The plan targets Python.
+
+Legacy method pools and `code/model-code-analyzer.md` may be read during migration, but they do not override the human choice.
+
+# Workflow
+
+1. Read the code plan, decision ledger, method card, probe conditions, data profile, and any referenced feature spec/audit.
+2. Confirm scope:
+   - one approved main method;
+   - one usable baseline;
+   - fallback only when an activation decision or evidenced trigger exists.
+3. Generate clear runnable `.py` files under `code/Qx/`.
+4. Use project-root-safe paths, fixed seeds, explicit inputs, and minimal justified dependencies.
+   - Implement learned preprocessing, feature selection, and tuning inside the training fold or chronological training window.
+   - Use exactly the retained variables/parameters in the approved feature spec; report any mismatch instead of silently adding or dropping inputs.
+5. Save:
+   - tables to `results/Qx/experiments/roundN/tables/`;
+   - metrics to `.../metrics/`;
+   - useful diagnostic/comparison figures to `.../figures/`;
+   - canonical `run_summary.json`.
+   - Git experiment ID, branch/parent context, data/split/feature/metric hashes and structured primary metric required for comparable versioned experiments.
+6. Evaluate and record output-degeneracy and fallback-trigger metrics required by the plan.
+7. Preserve the runner's mandatory log/receipt under project AGENTS.md; add diagnostic logs only when they help explain failures or warnings.
+8. Read the active experiment ID from `planning/workflow_run.json` and use it in the result directory. Commit explicit code/config paths with `git-experiment-manager checkpoint` BEFORE execution, then use `experiment_git.py run --experiment-id <id> --summary results/Qx/experiments/<id>/run_summary.json --code-paths <files> --inputs <files> -- <actual command>`. The runner saves the execution receipt and log.
+9. Hand off to `code-reviewer`.
+10. Use `git-experiment-manager record` to save receipt and reviewed evidence. Changed code requires a new checkpoint and fresh attempt; never relabel old results with a later commit.
+
+# Script Layout
+
+Prefer the smallest clear layout:
+
+```text
+code/Qx/
+├── qx_code_plan.md
+├── qx_baseline.py
+├── qx_main.py
+└── run_all.py        # only when coordination is useful
+```
+
+Do not create one script per unapproved candidate. Do not create a README that duplicates the code plan.
+
+# Run Summary
+
+Follow the schema in `model-code-analyzer`. Include:
+
+- approved decision ID;
+- method IDs and roles;
+- inputs and outputs;
+- seed and environment;
+- execution status and timing;
+- compact metric summaries;
+- output-degeneracy evidence;
+- warnings/errors;
+- fallback-trigger state.
+
+# Rules
+
+- Do not change the approved model or baseline.
+- Resolve modeling inputs from the data contract; raw-data access follows project AGENTS.md.
+- Do not hide assumptions in code.
+- Do not fit imputers, scalers, encoders, selectors, lag windows, or hyperparameters on validation/test information.
+- Do not emit placeholder metrics, figures, or successful statuses.
+- Prefer portable `.py` scripts over notebook-only workflows.
+- Keep intermediate files only when needed for explanation, review, robustness, or debugging.
+- Use Type 1 diagnostic figures internally; do not present them as paper figures.
+
+# Verification
+
+- Main and baseline both ran and are directly comparable.
+- Fallback code is absent unless activated.
+- Formal outputs and run summary exist.
+- Seed, inputs, versions, warnings, and errors are recorded.
+- Required concentration/degeneracy checks are saved.
+- The run summary names the data profile and applicable feature spec, and feature outputs match that contract.
+- Git and comparison-contract fields are complete enough for `compare_experiments.py`.
+- Next handoff is `code-reviewer`.
