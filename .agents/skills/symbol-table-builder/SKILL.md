@@ -3,6 +3,8 @@ name: symbol-table-builder
 description: Build and maintain one global mathematical symbol and unit table from the problem frame and active method cards, resolving cross-subquestion conflicts before code or paper work.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Ensure the same concept uses one symbol and different concepts do not collide.

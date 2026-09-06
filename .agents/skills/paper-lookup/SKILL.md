@@ -9,6 +9,8 @@ metadata:
   skill-author: "K-Dense Inc."
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Paper Lookup
 
 This skill gives you 11 academic literature APIs with documented endpoints. Your job is to turn the user's intent into a reproducible retrieval: pick the authoritative database(s), make bounded and rate-limited calls, and return an answer with enough provenance (endpoints, parameters, identifiers, access date) that a human or another agent can repeat it.

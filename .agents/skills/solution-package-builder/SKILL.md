@@ -3,6 +3,8 @@ name: solution-package-builder
 description: Assemble a submission-ready writer package from final method, result, robustness, figure, and human-decision artifacts, then freeze approved numerical claims with provenance.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Create the writer's single source package and immutable numerical snapshot. Do not manufacture missing judgments or freeze unapproved claims.

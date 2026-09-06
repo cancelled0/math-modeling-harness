@@ -3,6 +3,8 @@ name: consistency-auditor
 description: Run scoped or final cross-media consistency checks for mathematical-modeling artifacts, comparing canonical numbers, symbols, parameters, decisions, files, and paper claims without performing full-workspace audits for low-risk changes.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Modes
 
 - `scoped`: run only for a `CANONICAL` or `FROZEN` change and only for affected Qx/identifiers.

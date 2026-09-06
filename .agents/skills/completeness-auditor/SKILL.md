@@ -3,6 +3,8 @@ name: completeness-auditor
 description: Audit whether the semantic evidence required by the active lean or submission profile exists and is current, without requiring one verbose artifact per skill or an arbitrary number of pass bullets.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Check deliverable evidence, not whether every invoked skill left a ceremonial report.

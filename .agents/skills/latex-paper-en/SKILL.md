@@ -31,6 +31,8 @@ metadata:
 allowed-tools: Read, Glob, Grep, Bash(uv *)
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # LaTeX Academic Paper Assistant (English)
 
 Use this skill for targeted work on an existing English LaTeX paper project. Keep the workflow low-friction: identify the right module, run the smallest useful check, and return actionable comments in LaTeX-friendly review format.

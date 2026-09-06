@@ -3,6 +3,8 @@ name: matlab-code-reviewer
 description: Review, run, debug, and verify approved MATLAB or Beita Tianyuan modeling code against its plan, data contract, method decision, compatibility constraints, and experiment outputs, saving one compact JSON review.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - MATLAB code and `code/matlab/Qx/qx_code_plan.md` exist.
@@ -12,7 +14,7 @@ description: Review, run, debug, and verify approved MATLAB or Beita Tianyuan mo
 # Workflow
 
 1. Resolve approved main/baseline scope and any activated fallback.
-2. Inspect and run the code when a compatible runtime is available.
+2. Inspect code and existing execution evidence. Any new model execution in a compatible runtime follows the checkpoint/receipt policy in project AGENTS.md.
 3. Evaluate:
    - `syntax`
    - `input_contract`

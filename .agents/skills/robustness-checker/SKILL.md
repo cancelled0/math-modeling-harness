@@ -3,6 +3,8 @@ name: robustness-checker
 description: Design and run risk-targeted robustness, sensitivity, error, and baseline checks for an approved mathematical model, emitting compact machine evidence in lean mode and a final report in submission mode.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Test the claims most likely to fail. Choose checks from the model's assumptions and decision risks rather than filling a generic checklist.

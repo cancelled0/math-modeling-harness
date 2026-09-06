@@ -3,6 +3,8 @@ name: figure-table-planner
 description: Plan the smallest set of diagnostic, comparison, paper, and appendix figures or tables needed to support verified mathematical-modeling decisions and claims.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Make every visual evidence-bearing. Prefer fewer useful visuals over a decorative inventory.

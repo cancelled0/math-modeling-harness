@@ -3,6 +3,8 @@ name: matlab-model-code-generator
 description: Generate and run minimal reproducible MATLAB or Beita Tianyuan compatible code for the human-approved main method and usable baseline, with compact experiment artifacts and a canonical run summary.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - G2.5 human method choice is recorded.
@@ -24,7 +26,7 @@ Legacy artifacts may be read during migration but do not override the human deci
 5. Save tables, metrics, useful figures, and `run_summary.json` under `results/Qx/experiments/roundN/`.
    Include Git experiment ID, branch/parent context, data/split/feature/metric hashes and a structured primary metric.
 6. Evaluate output-degeneracy and fallback-trigger metrics required by the plan.
-7. Use `diary` or another full log only for a failure or reproducibility warning.
+7. Preserve the runner's mandatory log/receipt under project AGENTS.md; add `diary` diagnostics when a failure or warning needs them.
 8. Read the active experiment ID from `planning/workflow_run.json` and use it in the result directory. Commit explicit `.m` and config paths with `git-experiment-manager checkpoint` BEFORE execution, then use `experiment_git.py run --experiment-id <id> --summary results/Qx/experiments/<id>/run_summary.json --code-paths <files> --inputs <files> -- <actual MATLAB/北太天元 command>`. The runner saves receipt and log. If the runtime is unavailable, report the unexecuted state explicitly.
 9. Hand off to `code-reviewer`.
 10. Use `git-experiment-manager record` to save receipt and reviewed evidence. Changed code requires a new checkpoint and fresh attempt; never relabel old results with a later commit.
@@ -56,7 +58,7 @@ Follow the `model-code-analyzer` contract, including approved decision ID, roles
 # Rules
 
 - Do not change the selected mathematical method.
-- Do not access or overwrite raw data.
+- Resolve modeling inputs from the data contract; raw-data access follows project AGENTS.md.
 - Do not fabricate successful execution when MATLAB/北太天元 is unavailable.
 - Do not learn preprocessing, lag choices, variable selection, or tuning settings from validation/test data.
 - Keep only evidence-bearing intermediate outputs.

@@ -3,6 +3,8 @@ name: python-code-reviewer
 description: Review, run, debug, and verify approved Python modeling code against its code plan, data contract, method decision, risk conditions, and experiment outputs, saving one compact JSON review.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - Python code and `code/Qx/qx_code_plan.md` exist.
@@ -12,7 +14,7 @@ description: Review, run, debug, and verify approved Python modeling code agains
 # Workflow
 
 1. Resolve the approved main and usable baseline. Flag scripts for unapproved candidates unless a fallback activation exists.
-2. Inspect and run the code in the intended order.
+2. Inspect the code and existing execution evidence. Any new model execution follows the checkpoint/receipt policy in project AGENTS.md.
 3. Evaluate required checks:
    - `syntax`: imports, execution, exceptions, and obvious runtime faults.
    - `input_contract`: paths, fields, units, shapes, missing-data handling, and raw-data protection.
@@ -55,7 +57,7 @@ Statuses are `PASS`, `FAIL`, or `NOT_APPLICABLE` with a reason. Any required `FA
 - Do not fabricate execution or outputs.
 - Do not approve a toy diagnostic reference as the official baseline.
 - Do not silently change mathematical meaning.
-- Do not create success logs beyond the review JSON.
+- Save the review JSON; retain the runner's execution log/receipt without duplicating it.
 - Treat code newer than its review as requiring the affected checks to rerun, not necessarily the entire pipeline.
 
 # Verification

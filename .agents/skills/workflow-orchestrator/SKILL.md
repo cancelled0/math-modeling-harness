@@ -3,6 +3,8 @@ name: workflow-orchestrator
 description: 运行和检查数学建模工作区的文件型状态机，按子问题维护阶段门、产物、Git 实验上下文、暂停/恢复和局部重跑，并只路由一个下一动作；不替代专业建模工作。
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # 数学建模状态机
 
 当前执行契约以 [Runtime revision 2](references/runtime-contract.md) 为准，正式工作先读取它。旧会话用 migrate 备份并重新验证。新增结果展示位于鲁棒性之后、结果判断之前。start/finish 执行检查并绑定依赖哈希，文件存在不会自动完成步骤。
@@ -49,17 +51,17 @@ smoke     在临时 Git 工作区运行模板驱动冒烟测试
 - submission 在方法讨论前：`modeling-evidence-collector` 完成学术证据扫描；论文原文由 `paper-lookup` 与 `related-paper-analyzer` 支持，外部数据回到 `data-auditor-cleaner`。
 - 数据就绪后：可选 `modeling-thought-partner` 讨论 → `method-selector`。
 - 人工方法决定后：`git-experiment-manager` → `model-code-analyzer` → 语言生成器 → `code-reviewer`。
-- 有结果：`result-report-generator` 归因 → 人工接受/调整/备选 → `robustness-checker`。
+- 有结果：`result-report-generator` → `robustness-checker` → `modeling-results-presenter` → 人工结果判断。
 - submission 冻结后：解释、写作包、图表、论文分节；中文默认由 `latex-paper-zh` 先构建 PDF，再从唯一 TeX 主源派生带哈希的 DOCX 镜像，英文 LaTeX 用 `latex-paper-en`。
 - 最终按一致性、完整性、质量三个审计依次通过。
 
 ## 人工判断
 
-只允许四类：重大题意歧义、最终方法选择、结果接受/调整/备选、数值冻结与声明范围。每个模板检查点都必须是 `never_auto_approve`；只有晚于失效时间的人类 `DECIDED` JSONL 记录才能完成步骤。
+判断范围见项目 AGENTS.md「自动推进与人工判断」。模板使用 `never_auto_approve`；运行器校验人类 DECIDED 记录及其当前证据哈希，而非仅检查记录时间。
 
 ## Git 与重跑
 
-算法改变先由 `git-experiment-manager` 建立实验分支。运行摘要必须包含 Git 与可比契约。`rerun` 不删除旧文件，而将受影响步骤标记 `stale`；新产物和新人工决定必须晚于失效时间。冻结证据受影响时标记 `thaw_required`，完成解冻、重跑、重新冻结和范围一致性审计。
+Git 公共政策见项目 AGENTS.md「Git 与算法实验」。`rerun` 将受影响步骤标记 stale；冻结证据受影响时标记 thaw_required。通过 start/finish 校验当前证据绑定后重新完成步骤。
 
 ## 变更影响
 
@@ -68,11 +70,11 @@ smoke     在临时 Git 工作区运行模板驱动冒烟测试
 - `CANONICAL`：数据口径、单位、符号、方程、参数、指标或正式图路径。
 - `FROZEN`：影响冻结数值或论文声明。
 
-只重跑受影响的 Qx 和下游步骤，不因多个文件变化就自动全量审计。
+重跑范围遵循项目 AGENTS.md「公共汇报与变更范围」。
 
 ## 输出
 
-正式调度只报告 profile、Qx、当前阶段门、阻塞/失效证据、Git branch/commit、一个主要下一动作及人工暂停理由。专业 Skill 负责内容，状态机只负责契约和迁移。
+按项目 AGENTS.md「公共汇报与变更范围」输出调度状态。
 
 ## 验证
 

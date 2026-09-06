@@ -19,8 +19,8 @@
 
 `pending`、`ready`、`running`、`waiting_human`、`blocked`、`completed`、`failed`、`stale`。
 
-人工步骤只能通过新的、人类所有的 JSONL `DECIDED` 记录完成；运行器没有超时自动确认逻辑。
+人工政策见 [项目 AGENTS.md](../../../../AGENTS.md)；运行器核验人类 JSONL DECIDED 记录与当前证据绑定。
 
 ## 失效与重跑
 
-`rerun --from-step` 不删除旧产物，而把该步及下游标记为 `stale`。重新完成时，输出修改时间或决定时间必须晚于失效时间。冻结后改变算法、数据、特征、指标或声明时，先记录解冻，再局部重跑、重新冻结和一致性审计。
+`rerun --from-step` 将该步及下游标记 stale；新实验可能先返回 git-experiment 准备上下文。重新完成时通过 start/finish 检查当前输入、输出、决定与依赖哈希，公共重跑和冻结政策见项目 AGENTS.md。

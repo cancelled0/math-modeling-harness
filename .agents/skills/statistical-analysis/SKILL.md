@@ -7,6 +7,8 @@ metadata:
   skill-author: K-Dense Inc.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Statistical Analysis
 
 ## Overview

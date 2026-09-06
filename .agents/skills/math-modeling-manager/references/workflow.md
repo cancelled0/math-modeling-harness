@@ -2,16 +2,18 @@
 
 `modeling-thought-partner` 提供旁路讨论；`workflow-orchestrator` 是正式阶段状态的唯一调度者；专业 Skills 生成证据；Git 保存算法实验谱系。
 
+公共模式、默认值、证据纪律、人工判断、Git 和交付政策统一见 [项目 AGENTS.md](../../../../AGENTS.md)。本文件只保留阶段路由；可执行步骤以当前会话的模板及 runtime-contract.md 为准。
+
 ## D0 自由思路讨论
 
-当用户只想讨论或评价方案时，说明正在进行模型构建与思路讨论，适时追问并直接评价。不得生成 manifest、方法决定、代码或 Git 分支。用户明确正式开始或采用方案后进入 S0。
+进入 modeling-thought-partner，按项目 AGENTS.md 的模式边界讨论；需正式执行时返回当前阶段或初始化 S0。
 
 ## S0 会话、环境与 Git
 
-- 完整 CUMCM 使用 `submission`，局部实验使用 `lean`。
+- 从项目默认值和赛题配置解析 profile。
 - `workflow.py init` 只创建最小 planning 状态和每问 manifest。
 - 检查 Git、Python/MATLAB、LaTeX、Pandoc、字体和必要包；双交付还要检查 DOCX 渲染能力，不可用能力必须显式报告。
-- `main` 保存已接受状态；原始大数据、密钥、缓存和大型模型不纳入 Git。
+- Git 操作交给 git-experiment-manager。
 
 ## S1 题意理解与 G1
 
@@ -22,14 +24,14 @@
 
 ## S2 学术证据、数据与特征
 
-submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：同方向学术/官方资料 → 邻近结构学术资料 → 仍不足时相似赛题启发。
+按公共扫描政策及 [证据产物说明](evidence-policy.md) 生成资料摘要。
 
 - `modeling-evidence-collector` 建立需求、来源注册表和每问 evidence brief。
 - `paper-lookup` 负责可复现检索，`related-paper-analyzer` 读取原文并提取适用性与局限。
 - 本地或外部数据由 `data-auditor-cleaner` 审计；原始数据只读。
 - 派生特征、指标体系、变量选择和参数约简由 `feature-engineering` 完成，所有学习型转换只在训练折/窗口拟合。
 
-证据充分性看机理、适用性、验证/基线、数据/参数四类覆盖，不追求固定论文数量。
+扫描产物标注证据覆盖和缺口。
 
 ## D1 有证据支撑的思路讨论
 
@@ -44,9 +46,9 @@ submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：
 
 ## S4 Git 实验、实现与 G3
 
-1. `git-experiment-manager` 从稳定 commit 创建 `exp/<contest>/<Qx>/<algorithm>`。
+1. `git-experiment-manager` 按公共首次/后继实验政策准备分支与上下文。
 2. `model-code-analyzer` 写语言中立实验契约。
-3. Python/MATLAB 生成器实现并实际运行主方法和基线。
+3. Python/MATLAB 生成器实现主方法和基线，按公共代码 checkpoint → 受记录执行 → 审查 → 证据提交顺序操作。
 4. `run_summary.json` 记录 commit、父 commit、数据/划分/特征/指标定义哈希、随机种子和环境。
 5. `code-reviewer` 检查语法、契约、泄漏、预处理范围、特征一致性、可复现性、退化和可行性。
 
@@ -55,19 +57,17 @@ submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：
 1. `result-report-generator` 先归因为数据、特征、方法、参数、实现或指标问题。
 2. 只修复有证据的层；算法变化进入新的或既有实验分支。
 3. `compare_experiments.py` 只在同数据、划分、特征规格、指标定义和问题 ID 下判断优劣。
-4. 用户选择接受、调整或启用备选：接受则合并；拒绝则保留分支和失败证据并返回稳定分支。
-5. `robustness-checker` 执行消融、敏感性、扰动、重采样、误差与不确定性分析。
-6. 人工确认声明范围后由 `solution-package-builder` 生成写作包和 `frozen_numbers.json`。
-
-在结果判断之前，`modeling-results-presenter` 汇总假设、数据准备、关键推导、逐问模型与算法、结果文件、比较、局限和结论。报告状态为待审阅；用户先看到求解过程，再决定接受、调整、拒绝或启用备选。
+4. `robustness-checker` 执行任务适用的消融、敏感性、扰动、重采样、误差与不确定性分析。
+5. `modeling-results-presenter` 生成并展示逐问求解过程，随后进入 result-verdict；后续 Git 操作依当前决定执行。
+6. `final-method-explainer` 汇总最终方法；声明范围确认后由 `solution-package-builder` 生成写作包和 `frozen_numbers.json`。
 
 ## S6 论文、中文 LaTeX 与 G5
 
 1. 最终方法解释、结果分析、图表计划和验证图件齐全。
 2. `paper-section-writer` 只从写作包、冻结数字、人工决定和验证图表写作。
 3. `reference-manager` 核验引用，`paper-polisher` 润色。
-4. 中文 CUMCM 默认采用 `latex_primary_docx_mirror`：`paper/main.tex` 为唯一权威源，`latex-paper-zh` 先组装并编译 XeLaTeX PDF，再用 Pandoc 派生 DOCX，记录源文件与输出哈希，并对两种格式执行交付检查。
-5. DOCX 是审阅/提交镜像，不反向覆盖 TeX；Word 或 Overleaf 上的人工修改须同步回本地 TeX、提交 Git 并重新生成。工具链缺失时状态为 `unavailable`，也可以按用户配置切换为 Word 主格式。
+4. 中文 LaTeX 按项目交付配置交给 `latex-paper-zh`，执行构建、导出和交付检查。
+5. 外部编辑同步与权威源规则见项目 AGENTS.md「工作区约束」。工具链缺失记录 unavailable。
 6. 英文 LaTeX 使用 `latex-paper-en`。
 
 ## S7 三层审计与 G6
@@ -81,4 +81,4 @@ submission 在方法讨论前按 [证据优先级](evidence-policy.md) 扫描：
 - `CANONICAL`：数据口径、单位、方程、参数或指标改变，标记受影响 Qx 下游 stale。
 - `FROZEN`：记录解冻，重跑、重新冻结并做范围一致性审计。
 
-旧产物不删除；新产物和人工决定必须晚于 stale 时间。算法差方案通过保留分支返回稳定状态，已合并方案用 `git revert`，不破坏历史。
+恢复时由运行器重新验证当前哈希与依赖绑定；公共历史保留与回退政策见项目 AGENTS.md。

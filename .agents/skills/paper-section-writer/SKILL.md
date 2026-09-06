@@ -3,13 +3,15 @@ name: paper-section-writer
 description: Draft submission-ready mathematical-modeling paper sections from the approved solution package, frozen numbers, human decision ledger, and verified figures without searching scattered exploratory outputs or inventing interpretation.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - `rigor_profile` is `submission`.
 - Final method explanation exists.
 - Final result analysis exists.
 - Solution package and current frozen numbers exist.
-- Required human claim-scope and physical/domain-meaning decisions are recorded.
+- Required claim-scope decisions are recorded; physical/domain explanations have evidence within that scope.
 
 If any prerequisite is missing, return to its producer rather than drafting around the gap.
 
@@ -38,7 +40,7 @@ Do not hunt through raw experiment folders to invent a narrative.
 3. Draft the method description to match the final explanation and code.
 4. Draft results with:
    - value and comparison;
-   - human-confirmed physical/domain meaning;
+   - evidence-backed physical/domain meaning within the accepted claim scope;
    - uncertainty or robustness;
    - limitation and applicable scope.
 5. Mention the baseline and eliminated alternatives only when they explain a real decision.
@@ -48,7 +50,7 @@ Do not hunt through raw experiment folders to invent a narrative.
 
 # Human-Owned Content
 
-The AI may derive method rationale, physical interpretations, limitations and contribution framing from evidence. Distinguish established findings, AI analysis and interpretations awaiting confirmation. The user approves the final method, result acceptance and claim scope through the existing four judgment types; do not ask them to author every explanation. Record actual user adoption faithfully, never invent human-authored reasons. Reuse the accepted modeling-results-presenter report as a readable source alongside frozen numbers.
+Human decisions and AI analysis follow project AGENTS.md「自动推进与人工判断」. Reuse the accepted modeling-results-presenter report alongside frozen numbers; cite the evidence behind physical interpretations.
 
 # Rules
 

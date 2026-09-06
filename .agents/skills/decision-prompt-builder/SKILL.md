@@ -3,9 +3,13 @@ name: decision-prompt-builder
 description: Build one compact choice card at a genuine mathematical-modeling judgment point. Use before method screening, after a meaningful experiment, or before final claim/freeze approval so the human chooses the trade-off while AI handles mechanical consequences.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Ask the smallest useful question that only the human modeler can answer. Present mutually exclusive options with consequences; do not turn mechanical checks into user questions.
+
+Whether a new question is needed follows project AGENTS.md「自动推进与人工判断」. If the user already supplied the decision, hand it to modeler-decision-logger without another card. The configurations below change card presentation, not the authority or number of judgment types.
 
 # Inputs
 
@@ -91,7 +95,7 @@ Do not save the card unless another skill needs a durable prompt record.
 - Prefer one card at a decision point; avoid repeated micro-confirmations.
 - Do not pre-fill the user's choice or rationale.
 - Do not mark a decision `DECIDED`.
-- Do not require a prose essay. One evidence-linked sentence is sufficient when it captures the user's real reason.
+- Follow project AGENTS.md for optional user rationale; do not require an explanation to fill the ledger.
 - If there is no genuine human judgment, return control without asking a question.
 
 # Verification

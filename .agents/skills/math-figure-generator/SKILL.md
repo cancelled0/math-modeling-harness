@@ -3,6 +3,8 @@ name: math-figure-generator
 description: Generate and render-verify publication-quality mathematical-modeling figures from saved evidence, using the approved figure plan, source data, claim, type, and consistent visual system.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - Figure type, source artifacts, and target claim are known.

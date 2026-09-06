@@ -2,6 +2,8 @@
 
 manifest 的 schema_version 保持 1；runtime_revision 为 2。旧会话用 `workflow.py migrate` 保存历史快照并重新验证。现有产物不会仅因文件存在被自动接受。
 
+本文件描述可执行字段和操作；公共政策统一见 [项目 AGENTS.md](../../../../AGENTS.md)。
+
 ## 调用和依赖
 
 `start --question Qx --step ...` → 专业 Skill 生成真实产物 → `finish`。全局步骤用 GLOBAL；next 返回正确的负责人。所有声明的检查器必须执行，错误或未知检查阻止完成。
@@ -37,9 +39,9 @@ input_files、output_files、evidence_files、source_file、local_path 等显式
 当前证据准备好后用 `decision-context --question Qx --step ...` 获取 evidence_hashes。用户实际答复的 JSONL 包含 decision_id、decision_type、decided_by=human、status=DECIDED、user_message（真实答复或会话消息引用）、decided_at、choice、evidence_hashes；结果决定另含 experiment_id。
 
 - framing_choice、method_choice、package_signoff 使用 choice=accept；selected_method 记录具体方法并与契约一致。
-- result_verdict 使用 accept/adjust/reject/fallback；调整记录 diagnosis（data/feature/method/parameter/implementation/metric）、理由和 rerun_from。更换方法回到方法筛选和确认。
+- result_verdict 使用 accept/adjust/reject/fallback；调整记录 diagnosis（data/feature/method/parameter/implementation/metric）和 rerun_from，用户未说明理由时 rationale 为 null。更换方法回到方法筛选和确认。
 
-AI 可以自主推导、评价假设、解释物理意义和提出贡献。明确是分析建议，用户认可后记录其认可及采用的分析出处；不能把 AI 论述假称为用户原话。只保留原有四类实质判断。
+人工决定与 AI 分析的区分遵循项目 AGENTS.md「自动推进与人工判断」。
 
 `rerun --from-step ... --new-experiment` 新建运行目录并保留旧实验。Git 的接受/拒绝必须验证实际账本和实验绑定。冻结证据改变需记录解冻并重新冻结；纯排版不重跑模型。
 

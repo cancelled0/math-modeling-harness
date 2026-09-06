@@ -3,6 +3,8 @@ name: final-method-explainer
 description: Build the authoritative final method explanation for a submission-ready subquestion from the method card, human decision ledger, code plan, final results, and robustness evidence.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Explain the selected method completely without re-authoring why the human chose it.
@@ -30,10 +32,10 @@ Read legacy candidate and iteration logs only for migration.
 # Workflow
 
 1. Resolve the final method and baseline from the latest non-stale human decisions.
-2. Transcribe the human's selection rationale faithfully and cite its `decision_id`.
+2. Cite the selection decision_id; transcribe a user-supplied rationale when present. Apply project AGENTS.md for absent rationale and AI analysis provenance.
 3. Explain:
    - goal and scope;
-   - assumptions, including human-confirmed necessity labels;
+   - assumptions, including evidence-backed necessity labels and their provenance;
    - symbols and units;
    - mathematical formulation;
    - inputs, outputs, objective/criteria, and constraints;

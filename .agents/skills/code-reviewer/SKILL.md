@@ -3,6 +3,8 @@ name: code-reviewer
 description: Detect whether approved modeling code is Python or MATLAB/Beita Tianyuan and route it to the matching reviewer using the compact named-check review contract.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Workflow
 
 1. Inspect target code extensions and the implementation target in `qx_code_plan.md`.

@@ -3,6 +3,8 @@ name: data-auditor-cleaner
 description: Map contest attachments to subquestions, audit and clean raw data, and emit one reusable data profile with quality, coverage, imbalance, concentration, and method-readiness evidence for downstream risk screening.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Create traceable cleaned data and one reusable profile. Do not repeat the same data inspection separately for every candidate method.

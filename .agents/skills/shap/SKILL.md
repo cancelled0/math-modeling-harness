@@ -9,6 +9,8 @@ metadata:
   skill-author: K-Dense Inc.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # SHAP
 
 Use SHAP to describe how a fitted predictive model maps inputs to outputs. Work from the modern `shap.Explanation` API, make the explained output and background distribution explicit, and validate every explanation before interpreting it.

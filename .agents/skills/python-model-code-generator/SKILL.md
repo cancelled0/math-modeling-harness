@@ -3,6 +3,8 @@ name: python-model-code-generator
 description: Generate and run minimal reproducible Python modeling code for the human-approved main method and usable baseline, saving compact experiment artifacts and a canonical run summary.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - G2.5 human method choice is recorded in `methods/Qx/qx_decisions.jsonl`.
@@ -31,7 +33,7 @@ Legacy method pools and `code/model-code-analyzer.md` may be read during migrati
    - canonical `run_summary.json`.
    - Git experiment ID, branch/parent context, data/split/feature/metric hashes and structured primary metric required for comparable versioned experiments.
 6. Evaluate and record output-degeneracy and fallback-trigger metrics required by the plan.
-7. Persist full logs only on failure or when a warning needs reproduction.
+7. Preserve the runner's mandatory log/receipt under project AGENTS.md; add diagnostic logs only when they help explain failures or warnings.
 8. Read the active experiment ID from `planning/workflow_run.json` and use it in the result directory. Commit explicit code/config paths with `git-experiment-manager checkpoint` BEFORE execution, then use `experiment_git.py run --experiment-id <id> --summary results/Qx/experiments/<id>/run_summary.json --code-paths <files> --inputs <files> -- <actual command>`. The runner saves the execution receipt and log.
 9. Hand off to `code-reviewer`.
 10. Use `git-experiment-manager record` to save receipt and reviewed evidence. Changed code requires a new checkpoint and fresh attempt; never relabel old results with a later commit.
@@ -67,7 +69,7 @@ Follow the schema in `model-code-analyzer`. Include:
 # Rules
 
 - Do not change the approved model or baseline.
-- Do not read or overwrite raw data.
+- Resolve modeling inputs from the data contract; raw-data access follows project AGENTS.md.
 - Do not hide assumptions in code.
 - Do not fit imputers, scalers, encoders, selectors, lag windows, or hyperparameters on validation/test information.
 - Do not emit placeholder metrics, figures, or successful statuses.

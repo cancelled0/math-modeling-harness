@@ -3,6 +3,8 @@ name: problem-classifier
 description: Classify each parsed mathematical-modeling subquestion by required output and structure, surface ambiguous framing trade-offs for human choice, and record primary/secondary task types without selecting algorithms.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Preconditions
 
 - `planning/parse/problem_parse.json` exists and maps every Qx to an output.
@@ -71,7 +73,7 @@ Detailed cues are in `references/task-type-guide.md`.
 - Every Qx has one primary type.
 - Mixed/secondary types are justified.
 - Classification evidence resolves to the parse.
-- Ambiguous framing is human-confirmed or remains a blocker.
+- Material framing ambiguity follows project AGENTS.md's judgment policy; ordinary classification uncertainty is documented without adding a checkpoint.
 - No algorithm selection leaked into classification.
 
 # Reference

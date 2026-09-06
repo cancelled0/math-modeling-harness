@@ -3,6 +3,8 @@ name: problem-parser
 description: Parse a mathematical-modeling problem into goals, objects, data, constraints, outputs, subquestions, dependencies, variables, relationships, and human-confirmed success criteria before any method selection.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Produce a model-neutral problem contract. Do not start from favorite algorithms or infer missing attachments.
@@ -84,4 +86,4 @@ Produce a model-neutral problem contract. Do not start from favorite algorithms 
 - Constraints and dependencies are explicit.
 - Missing attachments and ambiguities are visible.
 - Facts, proposals, assumptions, and decisions are separated.
-- Human-owned success criteria are confirmed or remain a blocker.
+- Material ambiguity in success criteria follows project AGENTS.md's framing judgment; reuse explicit problem requirements and already recorded choices.

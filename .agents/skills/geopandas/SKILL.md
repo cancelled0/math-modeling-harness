@@ -10,6 +10,8 @@ metadata:
   last-reviewed: "2026-07-23"
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # GeoPandas
 
 Use GeoPandas for planar vector data represented as pandas-like `GeoSeries` and

@@ -3,6 +3,8 @@ name: model-code-analyzer
 description: Translate a human-approved main method and usable baseline into a minimal language-neutral implementation and experiment contract. Use after G2.5 and data readiness, before Python or MATLAB code generation.
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Purpose
 
 Define exactly what code must implement and save. Do not expand the approved experiment scope or fully plan a dormant fallback.
@@ -126,7 +128,7 @@ Execution order: explicit code checkpoint → `experiment_git.py run` → code r
 - Do not add candidates or change model meaning.
 - Do not plan a diagnostic reference as the official baseline.
 - Do not implement a fallback before activation.
-- Do not require success logs.
+- Do not require duplicate logs beyond the execution evidence mandated by project AGENTS.md.
 - Do not create a README when the code plan already provides the same instructions.
 - Stop if a human choice, required parameter, input field, or comparable baseline output is missing.
 

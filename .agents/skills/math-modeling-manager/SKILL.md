@@ -3,6 +3,8 @@ name: math-modeling-manager
 description: 统一调度数学建模竞赛任务，在自由思路讨论、局部实验和完整提交之间选择模式；正式任务读取状态机并把一个主要动作路由给正确的专业 Skill，不替代专业分析。
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # 数学建模总入口
 
 把本 Skill 当作工作流入口和调度器，不当作万能求解器。专业 Skill 负责产出，`workflow-orchestrator` 负责 manifest 与阶段门，本 Skill 负责从用户意图和当前证据中选择下一条最短可靠路径。
@@ -10,12 +12,9 @@ description: 统一调度数学建模竞赛任务，在自由思路讨论、局�
 ## 模式选择
 
 - 用户只想讨论、质疑或比较建模思路且暂不执行时，直接进入 `modeling-thought-partner`，不加载正式状态机。
-- 局部实验、学习和临时分析使用 `lean`。
-- 完整赛题、持续建模、正式实现或论文交付使用 `submission`，进入 `workflow-orchestrator`。
+- 执行模式和默认 profile 按项目 AGENTS.md 及当前赛题配置选择，然后进入 `workflow-orchestrator`。
 
-讨论模式只有在用户明确表示采用方法、开始实现、正式求解或写入方案时才退出。不要把探索性赞同解释为正式决定。
-
-正式求解的任意阶段都可进入自由思路讨论。讨论时允许主动推导、创造和比较模型，不受当前阶段门、既定方法族或“一个主要 Skill”调度规则限制；正式状态保持原状，待用户要求落地后再按已有授权恢复流程。以下启动检查、路由步骤和强制交接用于正式执行，不作为自由讨论的前置条件。
+讨论的授权边界与状态保持规则见项目 AGENTS.md「默认入口」及「自动推进与人工判断」。以下检查和交接用于正式执行。
 
 ## 正式启动检查
 
@@ -26,9 +25,7 @@ description: 统一调度数学建模竞赛任务，在自由思路讨论、局�
 
 ## 默认决策边界
 
-机械步骤在权限范围内自动推进，只在四类实质判断暂停：重大题意歧义、最终方法选择、结果接受/调整/备选启用、数值冻结与声明范围。通过 `decision-prompt-builder` 构造选择卡，通过 `modeler-decision-logger` 记录答案。
-
-不要把实现细节伪装成人工判断，也不要替用户生成理由。
+按项目 AGENTS.md「自动推进与人工判断」识别判断点；需要新选择时调用 `decision-prompt-builder`，已有明确答案交给 `modeler-decision-logger`。
 
 ## 路由步骤
 
@@ -52,11 +49,11 @@ description: 统一调度数学建模竞赛任务，在自由思路讨论、局�
 
 ## 会话配置
 
-实际赛题开始时可把 [会话配置模板](assets/session_config.template.json) 复制到 `planning/session_config.json` 并按用户要求修改。`submission` 用于完整参赛交付，`lean` 用于局部实验与学习。
+实际赛题开始时可把 [会话配置模板](assets/session_config.template.json) 复制到 `planning/session_config.json`。默认值来源为项目 AGENTS.md「默认配置」。
 
 ## 输出
 
-讨论模式按 `modeling-thought-partner` 自然交流。正式模式每次只报告：当前 profile、当前 Qx/阶段门、证据或阻塞项、Git 实验上下文、一个主要下一动作、需要人工确认的理由（若有）。随后执行已获授权且不需要人工判断的动作。
+按项目 AGENTS.md「公共汇报与变更范围」汇报调度状态；专业内容由当前 Skill 输出。
 
 ## 验证
 

@@ -3,6 +3,8 @@ name: git-experiment-manager
 description: 用 Git 为数学建模算法实验建立稳定快照、实验分支、可比结果记录、接受合并与可恢复回退。用于用户确认要实现或更换算法之后；不在纯思路讨论中创建提交。
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Git 算法实验管理
 
 把 Git 作为实验谱系而不是简单备份。读取 [版本策略](references/versioning-policy.md)，并优先使用 `scripts/experiment_git.py` 和 `scripts/compare_experiments.py` 完成确定性操作。
@@ -24,10 +26,7 @@ description: 用 Git 为数学建模算法实验建立稳定快照、实验分�
 
 ## 规则
 
-- 不提交密钥、原始大数据、缓存、环境目录或大型模型；用路径和哈希登记。
-- 不删除被拒绝的实验分支，除非用户明确要求清理。
-- 不因指标变化自动接受、拒绝或回退算法。
-- 冻结后的算法变更必须先记录解冻，并让 `workflow-orchestrator` 将受影响步骤标记为 stale。
+提交范围、人工判断、历史保留与冻结后变更统一见项目 AGENTS.md「Git 与算法实验」和「工作区约束」。
 
 ## 交接
 

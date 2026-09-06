@@ -3,6 +3,8 @@ name: latex-paper-zh
 description: 组装、编译和交付检查中文数学建模 LaTeX 论文，并可从权威 TeX 派生可追溯 DOCX 镜像。用于冻结结果和论文分节完成后的 CUMCM 中文 TeX/PDF/Word 双交付路径；不负责重新选择模型或改写未获批准的数值声明。
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # 中文数模 LaTeX 交付
 
 从冻结写作包、`paper/sections/*.tex`、验证图表和可追溯参考文献组装中文论文。普通模板可从 `assets/cumcm-template/` 复制；比赛提供官方模板时以官方模板为准，不擅自改变版式要求。默认以 `paper/main.tex` 为唯一权威源，DOCX 是从该版本生成的派生镜像。

@@ -3,6 +3,8 @@ name: model-assumptions-builder
 description: 从题意、方法契约和数据中整理模型假设、符号、准备工作及推导，主动评价假设的必要性与影响，供建模、结果展示和论文使用。
 ---
 
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+
 # Inputs
 
 - problem parse;
@@ -34,11 +36,11 @@ Read legacy candidate pools only during migration.
 - statement;
 - scope;
 - source and modeling need;
-- human-confirmed type: necessary or simplifying;
+- evidence-backed type: necessary or simplifying, with analysis provenance;
 - validation method/evidence;
 - impact if violated;
 - mitigation/fallback;
-- decision ID.
+- decision ID when covered by an actual method/claim decision; otherwise null.
 
 # Rules
 
