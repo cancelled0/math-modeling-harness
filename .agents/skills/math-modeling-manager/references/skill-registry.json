@@ -248,8 +248,8 @@
       "name": "paper-section-writer",
       "category": "communication",
       "stage": "G5",
-      "activation": "依据写作包、冻结数字和人工解释撰写论文分节",
-      "outputs": ["paper/sections/"],
+      "activation": "依据写作包、冻结数字和人工解释，按数学建模论文论证逻辑撰写或重写分节",
+      "outputs": ["paper/drafts/", "paper/sections/"],
       "next_skills": ["reference-manager", "paper-polisher", "latex-paper-zh", "latex-paper-en"]
     },
     {
