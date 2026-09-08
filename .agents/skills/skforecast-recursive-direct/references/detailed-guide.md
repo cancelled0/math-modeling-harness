@@ -1,5 +1,5 @@
 ---
-name: forecasting-single-series
+name: skforecast-recursive-direct
 description: >
   Forecasts a single time series using ForecasterRecursive or ForecasterDirect.
   Covers data preparation, model creation, training, prediction, backtesting,
@@ -9,7 +9,7 @@ description: >
 
 公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
 
-# Forecasting a Single Time Series
+# Recursive/Direct Single-Series Forecasting
 
 ## When to Use
 
@@ -20,16 +20,16 @@ Use this workflow when you have **one time series** and want to predict its futu
 
 ### Related skills
 
-- **Before full implementation**: `method-selector` records a recursive/direct or statistical-family choice and a usable time-series baseline; the human approves the final method at G2.5.
+- **Before full implementation**: `method-selector` records the approved recursive/direct or statistical-family choice and its reference policy; the human approves the final method at G2.5.
 - **Feature contract**: `feature-engineering` assembles lag, rolling, calendar, and exogenous features after the chronological split and records their availability time.
 - **ACF/PACF and ARIMA diagnostics**: use `statsmodels` when these diagnostics are relevant; do not require them for every estimator.
 - **Estimator pipeline and tuning**: use `scikit-learn`, fitting preprocessing and tuning only inside chronological training folds.
 - **Intervals and stability**: use the interval support in this workflow, then verify coverage, window sensitivity, and drift with `robustness-checker`.
-- **Required baseline**: always run a task-completing seasonal-naive, last-value, moving-average, or simple statistical baseline on the same backtest windows and metrics.
+- **Reference comparison**: run a task-completing seasonal-naive, last-value, moving-average, or simple statistical reference when the method contract requires comparison, using the same backtest windows and metrics.
 
 ## Stop Conditions
 
-Scan before writing code. Each row lists a rule, the symptom when it is broken, and the recovery. For failures outside this table, return to `result-report-generator` for data/feature/method/parameter/implementation/metric diagnosis.
+Scan before writing code. Each row lists a rule, the symptom when it is broken, and the recovery. For failures outside this table, return to `result-evaluator` for data/feature/method/parameter/implementation/metric diagnosis.
 
 | Rule | Symptom | Recovery |
 |------|---------|----------|

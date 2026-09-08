@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "description": "Canonical machine-field contracts for workflow JSON artifacts. Producer Skills and runtime validation share this file.",
+  "contracts": {
+    "problem-frame": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "source_files", "global_goal", "subquestions", "material_ambiguities"],
+        "nonempty": ["global_goal", "subquestions"]
+      }
+    ],
+    "data-audit": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "data_mode", "input_files", "quality_findings", "question_readiness"],
+        "allowed_values": {"data_mode": ["attached", "external", "none", "synthetic_test"]},
+        "conditional": ["input_files_or_no_data_reason"]
+      },
+      {
+        "output_index": 1,
+        "required": ["schema_version", "sources"]
+      }
+    ],
+    "method-screen": [
+      {
+        "output_index": 2,
+        "required": ["schema_version", "status", "question_id", "main", "reference_policy", "rationale", "task_type", "required_checks"],
+        "nonempty": ["main", "rationale", "task_type", "required_checks"]
+      }
+    ],
+    "model-foundations": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "assumptions", "symbols", "preparation", "derivations", "validation_plan"]
+      }
+    ],
+    "implementation-spec": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "modules", "inputs", "outputs", "checks"],
+        "nonempty": ["modules", "outputs", "checks"]
+      }
+    ],
+    "model-run": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "experiment_id", "task_type", "methods", "scientific_checks", "execution", "environment", "random_seed"],
+        "nonempty": ["methods", "execution", "environment"],
+        "one_of": [["primary_result", "primary_metric"]]
+      }
+    ],
+    "code-review": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "experiment_id", "reviewed_run", "checks", "evidence_files"],
+        "nonempty": ["checks", "evidence_files"]
+      }
+    ],
+    "run-assessment": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "experiment_id", "findings", "risk_disposition", "evidence_files"],
+        "allowed_values": {"status": ["ready_for_robustness", "needs_repair"]},
+        "nonempty": ["evidence_files"]
+      }
+    ],
+    "robustness": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "experiment_id", "coverage", "findings", "limitations", "evidence_files"],
+        "nonempty": ["evidence_files"]
+      }
+    ],
+    "result-synthesis": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "experiment_id", "results", "reference_evaluation", "robustness", "limitations", "evidence_files"],
+        "allowed_values": {"status": ["ready_for_decision"]},
+        "nonempty": ["results", "evidence_files"]
+      }
+    ],
+    "figure-plan": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "items"],
+        "conditional": ["items_or_omission_reason"]
+      }
+    ],
+    "figures": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "question_id", "figures"],
+        "conditional": ["figures_or_omission_reason"]
+      }
+    ],
+    "freeze": [
+      {
+        "output_index": 1,
+        "required": ["schema_version", "status", "question_id", "claim_scope", "claims", "evidence_files"]
+      }
+    ],
+    "submission-audit": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "checks", "evidence_files", "delivery_files", "render_review", "unresolved"],
+        "nonempty": ["checks", "evidence_files", "delivery_files", "render_review"]
+      }
+    ],
+    "quality-audit": [
+      {
+        "output_index": 0,
+        "required": ["schema_version", "status", "sampled_checks", "evidence_files", "unresolved"],
+        "nonempty": ["sampled_checks", "evidence_files"]
+      }
+    ]
+  }
+}

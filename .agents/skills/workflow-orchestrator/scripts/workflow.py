@@ -21,7 +21,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import contracts as c
 
 GATE_ORDER = {"G0": 0, "G1": 1, "G2": 2, "G2.5": 3, "G3": 4, "G4": 5, "G5": 6, "G6": 7}
-RUNTIME_REVISION = 2
+RUNTIME_REVISION = 3
 
 class WorkflowError(RuntimeError):
     pass
@@ -128,28 +128,35 @@ def graph(root, run, template):
     nodes, last = {}, {q: None for q in run["questions"]}
     for base in applicable_steps(template, run["config"]):
         owners = ["GLOBAL"] if base.get("scope") == "global" else run["questions"]
+        produced = False
         for q in owners:
             step = copy.deepcopy(base)
             step["question_id"] = q
             if step.get("checkpoint", {}).get("conditional_field"):
-                parse = root / "planning/parse/problem_parse.json"
+                parse = root / "planning/problem_contract.json"
                 field = step["checkpoint"]["conditional_field"]
                 if not parse.is_file() or not read_json(parse).get(field):
-                    step.pop("checkpoint")
+                    continue
             key = f"{q}:{step['id']}"
             deps = set(filter(None, last.values())) if q == "GLOBAL" else ({last[q]} if last[q] else set())
             deps.update(render(x, q) for x in step.get("depends_on", []))
             if step["id"] == "method-screen":
-                deps.update(f"{up}:result-verdict" for up in run["config"].get("question_dependencies", {}).get(q, []))
+                upstream_result = "result-verdict" if run["config"].get("require_result_verdict") else "result-synthesis"
+                deps.update(f"{up}:{upstream_result}" for up in run["config"].get("question_dependencies", {}).get(q, []))
             iteration = run.get("iterations", {}).get(q, "round1")
             for field in ("outputs", "inputs"):
                 step[field] = [render(x.replace("{experiment_id}", iteration), q) for x in step.get(field, [])]
             step["run_summary"] = f"results/{q}/experiments/{iteration}/run_summary.json"
-            if step["id"] == "code-plan" and run["config"].get("feature_engineering"):
+            if step["id"] in {"implementation-spec", "model-run"} and run["config"].get("feature_engineering"):
                 step["inputs"].extend([f"workspace/features/{q}/{q.lower()}_feature_spec.json", f"workspace/features/{q}/{q.lower()}_feature_audit.json"])
+            if step["id"] == "model-run" and run["config"].get("detailed_code_plan"):
+                base = "code/matlab" if run["config"].get("implementation_language") == "matlab" else "code"
+                step["inputs"].append(f"{base}/{q}/{q.lower()}_implementation_spec.json")
             step["dependencies"] = sorted(deps)
             nodes[key] = step
-        last = {q: f"GLOBAL:{base['id']}" if owners == ["GLOBAL"] else f"{q}:{base['id']}" for q in last}
+            produced = True
+        if produced:
+            last = {q: f"GLOBAL:{base['id']}" if owners == ["GLOBAL"] else f"{q}:{base['id']}" for q in last}
     ordered, remaining = {}, dict(nodes)
     while remaining:
         ready = [key for key, step in remaining.items() if all(dep in ordered for dep in step["dependencies"])]
@@ -195,7 +202,7 @@ def snapshot(root, step, nodes):
     data = c.fingerprints(root, [p for p in step["outputs"] if not p.endswith(".jsonl")] + evidence_paths(step, nodes))
     if step.get("checkpoint"):
         data["@decision"] = hash_value(decision_for(root, step))
-    if step.get("delivery_artifact") or step["id"] == "visual-review":
+    if step.get("delivery_artifact") or step["id"] in {"submission-audit", "quality-audit"}:
         data.update(c.fingerprints(root, ["paper/sections", "paper/figures", "paper/refs.bib"]))
     return data
 
@@ -251,8 +258,9 @@ def derive_question(root, run, template, manifest, computed=None):
         status="completed" if complete else ("waiting_human" if action.get("owner") == "human" else action["status"].lower()),
         next_action=action if action["status"] == "READY" else None,
         blockers=[v for k, v in errors.items() if k.startswith(q + ":")])
+    accepted_result = valid.get(f"{q}:result-verdict", False) if run["config"].get("require_result_verdict") else valid.get(f"{q}:result-synthesis", False)
     manifest["allowed"] = {"code_generation": valid.get(f"{q}:method-choice", False),
-        "freeze": valid.get(f"{q}:result-verdict", False), "paper_writing": valid.get(f"{q}:freeze", False),
+        "freeze": accepted_result, "paper_writing": valid.get(f"{q}:freeze", False),
         "final_assembly": all(valid.get(f"{x}:paper-section", False) for x in run["questions"])}
     return manifest
 
@@ -324,8 +332,7 @@ def context_source_paths(run, q):
         "planning/events.jsonl",
         "planning/experiment_registry.jsonl",
         "planning/framing_decisions.jsonl",
-        "planning/parse/problem_parse.json",
-        "planning/classification/problem_classification.json",
+        "planning/problem_contract.json",
         "planning/manifests/GLOBAL.json",
         f"planning/manifests/{q}.json",
         f"planning/experiments/{q}/active_experiment.json",
@@ -338,8 +345,8 @@ def context_source_paths(run, q):
         f"methods/{q}/{lower}_foundations.json",
         f"methods/{q}/{lower}_decisions.jsonl",
         f"results/{q}/experiments/{iteration}/run_summary.json",
-        f"results/{q}/experiments/{iteration}/presentation.json",
-        f"results/{q}/reports/{lower}_final_result_analysis.md",
+        f"results/{q}/reports/{lower}_run_assessment.json",
+        f"results/{q}/reports/{lower}_result_evidence.json",
         f"results/{q}/reports/frozen_numbers.json",
         f"robustness/{q}/{lower}_robustness_summary.json",
     ]
@@ -460,10 +467,8 @@ def build_active_context(root, run, template, q, computed=None):
     nodes, manifests, valid, errors = computed or state(root, run, template)
     question_state = derive_question(root, run, template, manifests[q], (nodes, manifests, valid, errors))
     paths = context_source_paths(run, q)
-    problem = read_json_optional(root / "planning/parse/problem_parse.json")
+    problem = read_json_optional(root / "planning/problem_contract.json")
     subquestion = find_subquestion(problem, q)
-    classification = read_json_optional(root / "planning/classification/problem_classification.json")
-    question_classification = find_subquestion(classification, q)
     data_profile = read_json_optional(root / "workspace/data/data_profile.json")
     evidence_raw = f"workspace/evidence/{q}/evidence_brief.json"
     academic_evidence = read_json_optional(root / evidence_raw)
@@ -475,8 +480,10 @@ def build_active_context(root, run, template, q, computed=None):
     method = read_json_optional(root / method_raw)
     foundations_raw = f"methods/{q}/{q.lower()}_foundations.json"
     foundations = read_json_optional(root / foundations_raw)
-    presentation_raw = f"results/{q}/experiments/{run['iterations'][q]}/presentation.json"
-    presentation = read_json_optional(root / presentation_raw)
+    assessment_raw = f"results/{q}/reports/{q.lower()}_run_assessment.json"
+    assessment = read_json_optional(root / assessment_raw)
+    result_raw = f"results/{q}/reports/{q.lower()}_result_evidence.json"
+    result_evidence = read_json_optional(root / result_raw)
     robustness_raw = f"robustness/{q}/{q.lower()}_robustness_summary.json"
     robustness = read_json_optional(root / robustness_raw)
     freeze_raw = f"results/{q}/reports/frozen_numbers.json"
@@ -496,15 +503,16 @@ def build_active_context(root, run, template, q, computed=None):
         current_step = {"id": current_step, "skill": next_action.get("skill"), "owner": next_action.get("owner"),
                         "status": rec.get("status", "ready")}
 
-    accepted_result = valid.get(f"{q}:result-verdict", False)
+    accepted_result = (valid.get(f"{q}:result-verdict", False) if run["config"].get("require_result_verdict")
+                       else valid.get(f"{q}:result-synthesis", False))
     robustness_current = valid.get(f"{q}:robustness", False)
     freeze_current = valid.get(f"{q}:freeze", False)
     supported = []
     hypotheses = []
-    if presentation:
-        presentation_findings = normalized_findings(presentation.get("conclusions"), presentation_raw, "model_result",
-                                                   presentation.get("problem_goal"))
-        (supported if accepted_result else hypotheses).extend(presentation_findings)
+    if result_evidence:
+        result_findings = normalized_findings(result_evidence.get("results"), result_raw, "model_result",
+                                              result_evidence.get("claim_scope"))
+        (supported if accepted_result else hypotheses).extend(result_findings)
     if robustness and robustness_current:
         supported.extend(normalized_findings(robustness.get("findings"), robustness_raw, "robustness",
                                              "current experiment and tested perturbations"))
@@ -513,7 +521,7 @@ def build_active_context(root, run, template, q, computed=None):
         supported.extend(normalized_findings(claims, freeze_raw, "frozen_claim", "approved claim scope"))
     if subquestion:
         hypotheses.extend(normalized_findings(subquestion.get("proposed_relationships"),
-                                              "planning/parse/problem_parse.json", "proposed_relationship"))
+                                              "planning/problem_contract.json", "proposed_relationship"))
     if foundations:
         hypotheses.extend(normalized_findings(foundations.get("assumptions"), foundations_raw, "model_assumption"))
 
@@ -539,7 +547,7 @@ def build_active_context(root, run, template, q, computed=None):
     elif next_action.get("owner") == "human":
         blockers.append({"kind": "human_checkpoint", "reason": next_action.get("checkpoint", {}).get("reason")})
 
-    methods = project_fields(method, ("main", "usable_baseline", "conditional_fallback", "fallback", "rationale",
+    methods = project_fields(method, ("main", "reference_policy", "conditional_fallback", "fallback", "rationale",
                                              "task_type", "required_checks"))
     selected_method = next((row.get("selected_method") for row in reversed(confirmed)
                             if row.get("decision_type") == "method_choice" and row.get("selected_method")), None)
@@ -554,10 +562,10 @@ def build_active_context(root, run, template, q, computed=None):
             "status": question_state.get("status"), "run_status": run.get("status"), "current_step": current_step,
         },
         "problem": {
-            "source": "planning/parse/problem_parse.json" if problem else None,
+            "source": "planning/problem_contract.json" if problem else None,
             "global_goal": compact_value(problem.get("global_goal")) if problem else None,
             "question": project_fields(subquestion, ("id", "statement", "goal", "required_outputs", "success_criteria", "constraints", "dependencies")),
-            "classification": project_fields(question_classification, ("id", "primary_type", "secondary_type", "confidence", "required_validation", "risks")),
+            "classification": project_fields(subquestion, ("primary_type", "secondary_type", "confidence", "required_validation", "risks")),
         },
         "confirmed_decisions": confirmed,
         "methods": {"source": method_raw if method else None, "selected_method": selected_method, "contract": methods},
@@ -573,6 +581,8 @@ def build_active_context(root, run, template, q, computed=None):
             "audit": project_fields(feature_audit, ("status", "decisions", "leakage_checks", "ablation_results", "stability", "limitations", "review_status")),
         },
         "active_experiment": experiment,
+        "run_assessment": {"source": assessment_raw if assessment else None,
+                           "assessment": project_fields(assessment, ("status", "findings", "risk_disposition", "rerun_from"))},
         "supported_findings": supported,
         "hypotheses": hypotheses,
         "stale_or_rejected": stale_items,
@@ -834,16 +844,36 @@ def cmd_finish(root, args):
         record.update(status="failed", error=errors)
         save_manifest(root, manifest)
         raise WorkflowError("; ".join(errors))
+    if step["id"] == "run-assessment":
+        assessment = read_json(root / step["outputs"][0])
+        if assessment.get("status") == "needs_repair":
+            target = assessment.get("rerun_from")
+            allowed = {"data-audit", "feature-engineering", "method-screen", "implementation-spec", "model-run", "code-review"}
+            if target not in allowed:
+                raise WorkflowError("repair assessment has invalid rerun_from")
+            structural = target in {"data-audit", "feature-engineering", "method-screen"}
+            record.update(status="diagnosed", error=None, completed_at=now())
+            save_manifest(root, manifest)
+            record_event(root, "run_needs_repair", question_id=step["question_id"], assessment=assessment)
+            return cmd_rerun(root, argparse.Namespace(
+                question=step["question_id"], from_step=target,
+                new_run=True, new_branch=structural, new_experiment=False,
+            ))
     decision = decision_for(root, step)
     if decision and decision["choice"] in {"reject", "adjust", "fallback"}:
-        target = decision.get("rerun_from") or ("method-screen" if decision["choice"] == "fallback" else "model-run")
-        if target not in {"data-audit", "feature-engineering", "method-screen", "code-plan", "model-run"}:
+        target = decision.get("rerun_from") or ("model-run" if decision["choice"] == "adjust" else "method-screen")
+        if target not in {"data-audit", "feature-engineering", "method-screen", "implementation-spec", "model-run", "code-review"}:
             raise WorkflowError("invalid diagnostic rerun_from")
+        structural = target in {"data-audit", "feature-engineering", "method-screen"}
         record.update(status="rejected", decision_id=decision["decision_id"])
         save_manifest(root, manifest)
         record_event(root, "result_" + decision["choice"], decision=decision)
-        result = cmd_rerun(root, argparse.Namespace(question=step["question_id"], from_step=target, new_experiment=True))
-        result["git_action"] = "preserve rejected experiment; use Git decision command before implementing next iteration"
+        result = cmd_rerun(root, argparse.Namespace(
+            question=step["question_id"], from_step=target,
+            new_run=True, new_branch=structural, new_experiment=False,
+        ))
+        result["git_action"] = ("start a successor method-family branch after the new method decision" if structural
+                                else "keep the approved method-family branch and record a new run")
         return result
     record.update(status="completed", snapshot=snapshot(root, step, nodes), completed_at=now(), error=None)
     if step["id"] == "freeze":
@@ -864,15 +894,24 @@ def cmd_finish(root, args):
 
 def cmd_rerun(root, args):
     run, template = load_runtime(root)
-    nodes, manifests, _, _ = state(root, run, template)
     q = normalize_question(args.question)
+    initial_nodes = graph(root, run, template)
     key = f"{q}:{args.from_step}"
-    if key not in nodes:
+    if key not in initial_nodes:
         key = f"GLOBAL:{args.from_step}"
-    if key not in nodes:
+    if key not in initial_nodes:
         raise WorkflowError("unknown active rerun step")
     diagnostic_root = key
-    if getattr(args, "new_experiment", False):
+    new_run = bool(getattr(args, "new_run", False) or getattr(args, "new_experiment", False))
+    new_branch = bool(getattr(args, "new_branch", False))
+    if new_run or new_branch:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+        owners = run["questions"] if key.startswith("GLOBAL:") else [q]
+        for owner in owners:
+            run["iterations"][owner] = "run-" + stamp
+        write_json(runtime_paths(root)["run"], run)
+    nodes, manifests, _, _ = state(root, run, template)
+    if new_branch:
         git_key = f"{q}:git-experiment"
         if git_key in nodes and list(nodes).index(key) > list(nodes).index(git_key):
             key = git_key
@@ -880,8 +919,6 @@ def cmd_rerun(root, args):
     for node, step in nodes.items():
         if any(d in affected for d in step["dependencies"]):
             affected.add(node)
-    if getattr(args, "new_experiment", False):
-        run["iterations"][q] = "run-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
     for node in affected:
         step = nodes[node]
         manifest = manifests[step["question_id"]]
@@ -894,8 +931,11 @@ def cmd_rerun(root, args):
         save_manifest(root, manifest)
     run["status"] = "running"
     write_json(runtime_paths(root)["run"], run)
-    record_event(root, "rerun", rerun_root=key, diagnostic_root=diagnostic_root, affected=sorted(affected))
-    return {"status": "STALE", "affected": sorted(affected), "next": cmd_next(root, argparse.Namespace(question=q))}
+    record_event(root, "rerun", rerun_root=key, diagnostic_root=diagnostic_root, affected=sorted(affected),
+                 new_run=new_run, new_branch=new_branch)
+    return {"status": "STALE", "affected": sorted(affected), "run_id": run["iterations"].get(q),
+            "new_branch_required": new_branch,
+            "next": cmd_next(root, argparse.Namespace(question=q))}
 
 def cmd_pause(root, args):
     run, template = load_runtime(root)
@@ -940,8 +980,8 @@ def cmd_reconfigure(root, args):
     changed = {k for k in set(previous) | set(config) if previous.get(k) != config.get(k)}
     paper_only = changed <= {"paper_format", "delivery_mode", "paper_language", "research_budget_minutes", "paper_reserve_minutes", "deadline_at"}
     for q in run["questions"]:
-        target = "paper-section" if paper_only and profile == "submission" and not migrate else "problem-parse"
-        cmd_rerun(root, argparse.Namespace(question=q, from_step=target, new_experiment=False))
+        target = "paper-section" if paper_only and profile == "submission" and not migrate else "problem-frame"
+        cmd_rerun(root, argparse.Namespace(question=q, from_step=target, new_run=False, new_branch=False, new_experiment=False))
     record_event(root, "reconfigured", changed=sorted(changed), backup=str(backup))
     return {"status": "RECONFIGURED", "backup": str(backup), "next": cmd_next(root, argparse.Namespace(question=None))}
 
@@ -1075,14 +1115,16 @@ def build_parser():
     decision.add_argument("--user-message", required=True)
     decision.add_argument("--rationale", default=None)
     decision.add_argument("--selected-method")
-    decision.add_argument("--rerun-from", choices=("data-audit", "feature-engineering", "method-screen", "code-plan", "model-run"))
+    decision.add_argument("--rerun-from", choices=("data-audit", "feature-engineering", "method-screen", "implementation-spec", "model-run", "code-review"))
     sub.add_parser("pause").add_argument("--reason", required=True)
     for name in ("resume", "check", "migrate", "reconfigure", "smoke"):
         sub.add_parser(name)
     rerun = sub.add_parser("rerun")
     rerun.add_argument("--question", required=True)
     rerun.add_argument("--from-step", required=True)
-    rerun.add_argument("--new-experiment", action="store_true")
+    rerun.add_argument("--new-run", action="store_true", help="record a fresh run id on the current method-family branch")
+    rerun.add_argument("--new-branch", action="store_true", help="invalidate the structural method-family branch context")
+    rerun.add_argument("--new-experiment", action="store_true", help=argparse.SUPPRESS)
     comp = sub.add_parser("compare")
     comp.add_argument("left")
     comp.add_argument("right")

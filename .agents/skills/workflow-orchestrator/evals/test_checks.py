@@ -42,16 +42,16 @@ class DeterministicChecksTest(unittest.TestCase):
             self.assertEqual(report["status"], "FAILED")
             self.assertGreaterEqual(len(report["errors"]), 2)
 
-    def test_baseline_check_accepts_same_contract_successful_roles(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="check-baseline-") as temp:
+    def test_method_reference_check_accepts_optional_reference_contract(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="check-reference-") as temp:
             root = Path(temp)
             summary = root / "run_summary.json"
             summary.write_text(
                 json.dumps(
                     {
                         "methods": [
-                            {"role": "main", "status": "success", "metrics_summary": {"rmse": 1.0}},
-                            {"role": "usable_baseline", "status": "success", "metrics_summary": {"rmse": 1.4}},
+                            {"role": "main", "status": "success", "metrics_summary": {"rmse": 1.0}, "output_files": ["results.json"]},
+                            {"role": "empirical_baseline", "status": "success", "metrics_summary": {"rmse": 1.4}, "output_files": ["results.json"]},
                         ],
                         "comparison_contract": {
                             "data_hash": "d",
@@ -65,7 +65,9 @@ class DeterministicChecksTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            code, report = run_check("baseline_check.py", str(summary), cwd=root)
+            method = root / "method_contract.json"
+            method.write_text(json.dumps({"reference_policy": {"role": "empirical_baseline", "required": True}}), encoding="utf-8")
+            code, report = run_check("method_reference_check.py", str(summary), "--method-contract", str(method), cwd=root)
             self.assertEqual(code, 0)
             self.assertEqual(report["status"], "PASSED")
 

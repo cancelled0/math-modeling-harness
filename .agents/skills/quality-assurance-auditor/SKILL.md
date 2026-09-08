@@ -1,66 +1,10 @@
 ---
 name: quality-assurance-auditor
-description: Perform the final submission-level audit of mathematical-modeling workflow integrity, evidence quality, anti-fabrication, paper coherence, figures, references, and contest readiness after consistency and completeness audits pass.
+description: 在 submission audit 通过后做最终提交级抽样、质量和反虚构检查，生成一次 QA 结论。
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# Preconditions
+读取 `paper/audits/submission_audit.json`、当前 PDF/DOCX/TeX、冻结 claims、图表 manifest、引用和关键结果。抽样核对公式、数字、单位、页面、图表、引用和文件哈希，按 `workflow-orchestrator/assets/artifact-contracts.json` 的 quality-audit 契约输出 `paper/qa_report.json` 与简短 Markdown 视图。`status=passed` 仅在 `unresolved=[]` 且交付证据完整时使用。
 
-- `rigor_profile` is `submission`.
-- All Qx reached G5.
-- Final consistency and completeness audits exist.
-
-# Audit Dimensions
-
-1. **Workflow integrity**
-   - G1–G5 passed per Qx.
-   - Human judgments trace to the decision ledger.
-   - Main/baseline/fallback execution respected approved scope.
-
-2. **Evidence integrity**
-   - No fabricated data, references, experiments, metrics, or figures.
-   - Main claims trace to frozen numbers and robustness evidence.
-   - Limitations and uncertainty are visible.
-
-3. **Method quality**
-   - Baseline is usable.
-   - Assumptions, units, objectives, constraints, and solution steps are coherent.
-   - Output concentration/degeneracy and failure triggers were addressed.
-
-4. **Paper quality**
-   - Problem, method, results, and conclusions align.
-   - Claims are proportional to tested comparisons.
-   - Human-owned physical meaning and contribution are present.
-
-5. **Presentation**
-   - Required figures/tables exist and passed render checks.
-   - Figure types are used correctly.
-   - References are real, complete, and consistently cited.
-   - AI-use disclosure follows the current contest profile and verified rules.
-
-# Workflow
-
-1. Read the two earlier audits and unresolved blockers.
-2. Sample canonical sources directly; do not trust summaries alone.
-3. Record blocking and nonblocking findings with artifact paths and repair owners.
-4. Save `paper/qa_report.md`.
-5. Set verdict:
-   - `PASSED`
-   - `FAILED`
-   - `NOT_RUN`
-
-# Rules
-
-- Do not approve on partial audits.
-- Do not use artifact count or bullet count as a proxy for quality.
-- Do not repair issues inside QA.
-- Do not hide uncertainty or downgrade a blocker silently.
-- Do not claim compliance with time-varying contest rules without verification.
-
-# Verification
-
-- All five audit dimensions were evaluated.
-- Blocking findings are explicit and actionable.
-- QA verdict agrees with consistency/completeness verdicts and sampled evidence.
-- Final assembly is recommended only when all three audits pass.
+本 Skill 不重新选方法、不修改冻结数字、不要求另一份 completeness/consistency 报告；发现问题交回相应生产 Skill 或运行器。

@@ -214,8 +214,8 @@ def validate_active_context(root, args):
         if len(matches) != 1:
             raise ValueError("summary directory and experiment ID must match the active workflow")
         context = json.loads((root / f"planning/experiments/{matches[0]}/active_experiment.json").read_text(encoding="utf-8"))
-        if context.get("experiment_id") != args.experiment_id or context.get("branch") != branch(root):
-            raise ValueError("prepare the current experiment branch/context before execution")
+        if context.get("branch") != branch(root):
+            raise ValueError("prepare the approved method-family branch/context before execution")
         run_git(root, "merge-base", "--is-ancestor", context["parent_commit"], "HEAD")
 
 
@@ -280,7 +280,7 @@ def cmd_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     receipt = root / relative_path(root, args.summary)
     receipt = receipt.with_name("execution_receipt.json")
     if receipt.exists():
-        raise ValueError("attempt already recorded; preserve it and use a fresh experiment ID/directory")
+        raise ValueError("attempt already recorded; preserve it and use a fresh run ID/directory")
     try:
         result = execute_run(root, args)
         summary = json.loads((root / relative_path(root, args.summary)).read_text(encoding="utf-8"))

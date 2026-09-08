@@ -11,6 +11,6 @@
 - `checkpoint`：可选人工判断，必须声明 `never_auto_approve`。
 - `scope`：`global` 或每问；全局步骤只实例化一次并可等待全部 Qx。
 - `depends_on` / `inputs`：显式依赖和输入，运行器对输入、输出、上游证据和人工决定计算快照。
-- `checks` 中的专用契约由 Runtime revision 2 执行；未知检查不能默默跳过。
+- `checks` 中的专用契约由 Runtime revision 3 和 `assets/artifact-contracts.json` 执行；未知检查不能默默跳过。
 
-步骤运行记录包含状态、开始/结束时间、输入和输出、证据快照、错误、Git branch/commit 以及失效时间。`modeling-results-presenter` 在结果判断前生成带来源定位的求解过程与结果展示。专业 Skill 负责语义质量；运行器验证契约、证据、时效和状态迁移，不伪造专业结论。
+步骤运行记录包含状态、开始/结束时间、输入和输出、证据快照、错误、Git branch/commit 以及失效时间。`result-evaluator` 先生成机器结果证据；`modeling-results-presenter` 仅在用户需要完整讲解时从该证据派生视图。专业 Skill 负责语义质量；运行器验证契约、证据、时效和状态迁移，不伪造专业结论。

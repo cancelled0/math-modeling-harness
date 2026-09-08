@@ -29,8 +29,6 @@ def main() -> int:
         checked.append({"claim_id": claim_id, "matches_source": matches})
         if not matches:
             errors.append(f"frozen value does not match source: {claim_id}")
-        if not item.get("decision_id"):
-            errors.append(f"frozen value lacks decision_id: {claim_id}")
     if not checked:
         errors.append("no frozen values found")
     return emit(report("frozen_number_check", errors, [], {"claims": checked}), args.output)

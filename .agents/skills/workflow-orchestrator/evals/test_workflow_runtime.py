@@ -80,10 +80,10 @@ class WorkflowRuntimeTest(unittest.TestCase):
                 ),
             )
             result = workflow.cmd_rerun(
-                workspace, argparse.Namespace(question="Q1", from_step="problem-parse")
+                workspace, argparse.Namespace(question="Q1", from_step="problem-frame", new_run=False, new_branch=False)
             )
             manifest = workflow.load_manifest(workspace, "Q1")
-            self.assertEqual(result["next"]["step"], "problem-parse")
+            self.assertEqual(result["next"]["step"], "problem-frame")
             self.assertNotEqual(manifest.get("freeze_state"), "thaw_required")
 
     def test_pause_and_resume_are_persistent(self) -> None:

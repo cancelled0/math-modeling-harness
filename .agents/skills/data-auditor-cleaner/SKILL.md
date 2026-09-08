@@ -1,124 +1,24 @@
 ---
 name: data-auditor-cleaner
-description: Map contest attachments to subquestions, audit and clean raw data, and emit one reusable data profile with quality, coverage, imbalance, concentration, and method-readiness evidence for downstream risk screening.
+description: Establish the canonical data context for a modeling task, including no-data tasks, attachment mapping, read-only raw sources, reproducible cleaning, and per-question readiness.
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# Purpose
+# 数据上下文与清洗
 
-Create traceable cleaned data and one reusable profile. Do not repeat the same data inspection separately for every candidate method.
+生成唯一的 `workspace/data/data_profile.json`，字段遵循 `workflow-orchestrator/assets/artifact-contracts.json` 的 `data-audit` 契约。详细行级报告和清洗代码仅在实际发生非平凡转换时保存。
 
-# Preconditions
+## 三种模式
 
-- Problem parse and subquestion IDs exist.
-- Raw files are available under `workspace/data_raw/` or the workspace's documented legacy raw-data path.
-- Required outputs and known field needs are available.
-- Read `workspace/data/source_registry.json` when external sources were collected; verify that every used external file resolves to its registry entry.
+- `attached`：盘点题目附件，映射到 Qx，审计字段、单位、键、时间、缺失、重复、异常和泄漏风险。
+- `external`：在 attached 检查之外，核对实际使用文件与 `workspace/data/source_registry.json` 的来源、口径和哈希。
+- `none`：题目不需要数据时，保留空 `input_files`，写明 `no_data_reason`、仍需验证的数学条件和每问 readiness；不伪造附件或创建空清洗文件。
 
-Stop rather than fabricate a missing attachment, unit, field meaning, or label.
+## 清洗原则
 
-# Workflow
+原始文件只读，派生数据写入 `workspace/data_clean/`。表示归一化与带假设的删除、插补、缩尾、重编码分开记录；只有非平凡转换才保留脚本。外部数据的来源注册表由 `modeling-evidence-collector` 所有，本 Skill 只验证和引用，不创建第二份注册表。
 
-1. **Map attachments before cleaning.**
-   - List each attachment with name, size, sheet names, headers, and a small preview.
-   - Map it to Qx or mark it shared.
-   - Ask the user only when two mappings remain materially plausible.
+数据概况记录实际输入、质量发现、覆盖范围、字段语义、单位、有效样本量，以及适用的缺失、类别不平衡、时间间隔、冗余和输出集中风险。不存在或不适用的项目使用带理由的省略。
 
-2. **Preserve raw data.**
-   - Treat raw files as read-only.
-   - Record hashes or stable file metadata when practical.
-   - Write cleaned copies under `workspace/data_clean/`.
-
-3. **Audit structure and semantics.**
-   - Rows, columns, keys, types, units, categories, time granularity, and encoding.
-   - Missing values, duplicates, impossible values, outliers, discontinuities, and leakage risks.
-   - Field-to-subquestion and field-to-required-output mapping.
-
-4. **Compute reusable risk-profile statistics.**
-   - Effective sample size and rows usable per Qx.
-   - Missingness by field and row.
-   - Numeric distribution summaries and extreme-value rates.
-   - Category/class counts, imbalance ratios, rare levels, and cardinality.
-   - Time coverage, gaps, sampling interval, and chronological split constraints.
-   - Correlation/redundancy warnings where relevant.
-   - Target or score concentration indicators when a target exists.
-   - Record facts; do not convert them into a final method verdict.
-
-5. **Plan and apply cleaning.**
-   - Separate safe normalization of representation from assumption-bearing imputations or removals.
-   - Explain and record every assumption-bearing operation.
-   - Keep reproducible cleaning code only when transformations are nontrivial.
-
-6. **Assess readiness per Qx.**
-   - `ready`, `ready_with_warnings`, or `blocked`.
-   - Name missing fields and risks precisely.
-   - If the task requires derived predictors, an indicator system, lag/spatial/network features, feature selection, or parameter reduction, hand the profile to `feature-engineering`.
-   - Otherwise hand the profile to `method-selector` for method-specific risk probes.
-
-# Canonical Outputs
-
-```text
-workspace/data/data_report.md
-workspace/data/data_profile.json
-workspace/data_clean/<cleaned files>
-workspace/code/scripts/<cleaning script>   # only when needed
-```
-
-Accept legacy `workspace/data/data_clean/` as an input/output location during migration.
-
-# Data Profile Contract
-
-`data_profile.json` contains:
-
-```json
-{
-  "schema_version": 1,
-  "raw_files": [],
-  "attachment_mapping": [],
-  "fields": [],
-  "quality": {
-    "missingness": {},
-    "duplicates": {},
-    "impossible_values": {},
-    "outliers": {}
-  },
-  "coverage": {
-    "rows": 0,
-    "effective_sample_size": null,
-    "time_range": null,
-    "time_gaps": null
-  },
-  "distribution_risks": {
-    "class_imbalance": null,
-    "rare_categories": [],
-    "high_cardinality": [],
-    "redundancy_warnings": [],
-    "concentration_metrics": {}
-  },
-  "per_question_readiness": {},
-  "cleaned_files": [],
-  "unresolved_risks": []
-}
-```
-
-Use `null` with an explanation when a field is not applicable; do not invent a value to fill the schema.
-
-# Rules
-
-- Do not select the model.
-- Do not overwrite raw data.
-- Do not silently delete, impute, winsorize, rescale, or recode.
-- Do not produce decorative EDA.
-- Reuse one profile downstream instead of regenerating statistics.
-- Store detailed row-level change logs only when changes occurred; successful no-op checks need only summary counts.
-
-# Verification
-
-- Attachment mapping is unambiguous or human-confirmed.
-- Raw files remain untouched.
-- Cleaned files trace to raw sources and transformation rules.
-- Profile includes effective sample size, imbalance/cardinality, and concentration evidence when applicable.
-- Readiness is reported per subquestion.
-- Downstream handoff points to paths rather than pasting the full report.
-- Every used external file maps to `source_registry.json` when that registry exists.
+衍生特征、指标体系和变量约简交给 `feature-engineering`。用户只要求一个局部分布或异常问题时可调用 `exploratory-data-analysis`，但其发现应回填本概况或特征审计，不另立正式数据源。

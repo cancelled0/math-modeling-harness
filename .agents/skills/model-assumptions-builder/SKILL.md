@@ -1,56 +1,10 @@
 ---
 name: model-assumptions-builder
-description: 从题意、方法契约和数据中整理模型假设、符号、准备工作及推导，主动评价假设的必要性与影响，供建模、结果展示和论文使用。
+description: 在方法已批准后整理必要假设、符号、单位、准备、推导和验证计划，生成方法基础证据。
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# Inputs
+读取 `planning/problem_contract.json`、`method_contract.json`、数据概况和按需证据。输出 `methods/Qx/qx_foundations.json`，字段遵循 `workflow-orchestrator/assets/artifact-contracts.json` 的 model-foundations 契约。区分题设事实、数据观察、方法假设与待验证风险，说明假设被违反时对结果和声明的影响。
 
-- problem parse;
-- active method cards;
-- data profile and risk-probe summaries;
-- question dependency map;
-- existing assumptions and human decisions.
-
-Read legacy candidate pools only during migration.
-
-# Workflow
-
-1. Extract explicit problem assumptions and method-induced assumptions.
-2. Remove filler statements that do not affect model validity or interpretation.
-3. For each assumption record:
-   - scope and source;
-   - modeling need;
-   - applicable method/Qx;
-   - validation evidence;
-   - mitigation or fallback link.
-4. Identify conflicts across Qx.
-5. Analyze necessity, impact and conflicts proactively. Ask only when a conflict changes framing, final method or claim scope; use the existing judgment point.
-6. Keep AI analysis distinct from actual user decisions; do not invent the user's rationale.
-7. Save per-question `methods/Qx/qx_foundations.json` with assumptions, symbols, preparation and derivations. Include concrete statements, units, sources, validation and scope. Global assumption/symbol summaries may be derived from these records.
-
-# Assumption Fields
-
-- ID;
-- statement;
-- scope;
-- source and modeling need;
-- evidence-backed type: necessary or simplifying, with analysis provenance;
-- validation method/evidence;
-- impact if violated;
-- mitigation/fallback;
-- decision ID when covered by an actual method/claim decision; otherwise null.
-
-# Rules
-
-- Do not invent generic assumptions such as “data are accurate” unless they affect a real dependency.
-- Derive necessary/simplifying labels and impacts as evidence-backed analysis; user approval of model/claims governs final adoption.
-- Revisit an assumption only when its method, evidence, or downstream use materially changes.
-
-# Verification
-
-- Every assumption has a modeling need and source.
-- Human-owned labels trace to decisions.
-- Probe/robustness evidence addresses load-bearing assumptions.
-- Cross-Qx conflicts are resolved or explicit.
+本 Skill 不重新筛选方法、不替用户批准假设；会改变题意、方法或声明范围的冲突交回既有人工检查点。

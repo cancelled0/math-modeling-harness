@@ -1,56 +1,8 @@
 ---
 name: matlab-code-reviewer
-description: Review, run, debug, and verify approved MATLAB or Beita Tianyuan modeling code against its plan, data contract, method decision, compatibility constraints, and experiment outputs, saving one compact JSON review.
+description: 审查并验证已批准的 MATLAB/北太天元建模代码、兼容性、结果契约和可复现证据。
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# Preconditions
-
-- MATLAB code and `code/matlab/Qx/qx_code_plan.md` exist.
-- Approved decision, method card, data profile, applicable feature spec/audit, and run summary are available.
-- MATLAB or 北太天元 runtime availability is known.
-
-# Workflow
-
-1. Resolve approved main/baseline scope and any activated fallback.
-2. Inspect code and existing execution evidence. Any new model execution in a compatible runtime follows the checkpoint/receipt policy in project AGENTS.md.
-3. Evaluate:
-   - `syntax`
-   - `input_contract`
-   - `method_alignment`
-   - `reproducibility`
-   - `output_contract`
-   - `feature_and_leakage` when learned preprocessing, time ordering, target-derived fields, or variable/parameter selection is applicable
-4. Include compatibility evidence for toolbox usage, `jsonencode`, file I/O, plotting/export, and 北太天元 constraints.
-5. For `feature_and_leakage`, verify split-before-fit scope, forecast-time availability, target leakage, retained/dropped-variable agreement, and selection stability evidence. Add only other relevant numerical, feasibility, or scale checks.
-6. If runtime is unavailable, use `NOT_RUN` rather than claiming execution success.
-7. If asked to fix findings, patch minimally and rerun affected checks.
-8. Save `code/matlab/Qx/reviews/qx_matlab_review.json`.
-
-# Review Schema
-
-Use the same schema as `python-code-reviewer`, with:
-
-- `"language": "matlab"`
-- `runtime`
-- `compatibility_target`
-- optional `compatibility` check
-
-Required named checks use `PASS`, `FAIL`, or justified `NOT_APPLICABLE`. Runtime-dependent checks use `NOT_RUN` when execution was impossible; this blocks G3 until executed.
-
-# Rules
-
-- Do not pad pass items.
-- Do not fabricate MATLAB/北太天元 execution.
-- Do not approve unavailable toolbox dependencies without an explicit target exception.
-- Do not change the mathematical model silently.
-- Do not require a duplicate Markdown review.
-
-# Verification
-
-- Approved main and baseline scope is enforced.
-- Compatibility constraints are checked.
-- Run summary and outputs agree.
-- Applied preprocessing and variable set agree with the feature contract, with no validation/test leakage when applicable.
-- Verdict follows required check statuses and runtime evidence.
+检查算法映射、输入输出、单位、约束、划分、预处理、随机性、MATLAB/北太天元兼容性和执行收据，按 `workflow-orchestrator/assets/artifact-contracts.json` 的 code-review 契约输出 `code/matlab/Qx/reviews/qx_matlab_review.json`。不重新选方法；完成求解请求可修复机械错误并用新 run 重跑，语义变化交回运行器。

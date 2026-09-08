@@ -1,69 +1,10 @@
 ---
 name: python-code-reviewer
-description: Review, run, debug, and verify approved Python modeling code against its code plan, data contract, method decision, risk conditions, and experiment outputs, saving one compact JSON review.
+description: 审查并验证已批准的 Python 建模实现、数据契约、泄漏风险和运行证据。
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# Preconditions
+检查代码是否映射方法契约、输入输出、单位、划分、预处理、随机种子、异常处理、可复现运行和结果文件；使用 `workflow-orchestrator/assets/artifact-contracts.json` 的 code-review 契约输出 `code/Qx/reviews/qx_python_review.json`。
 
-- Python code and `code/Qx/qx_code_plan.md` exist.
-- Approved method decision, method card, data profile, applicable feature spec/audit, and relevant run summary are available.
-- Required inputs are accessible.
-
-# Workflow
-
-1. Resolve the approved main and usable baseline. Flag scripts for unapproved candidates unless a fallback activation exists.
-2. Inspect the code and existing execution evidence. Any new model execution follows the checkpoint/receipt policy in project AGENTS.md.
-3. Evaluate required checks:
-   - `syntax`: imports, execution, exceptions, and obvious runtime faults.
-   - `input_contract`: paths, fields, units, shapes, missing-data handling, and raw-data protection.
-   - `method_alignment`: formulas, objectives, constraints, assumptions, main/baseline roles, and fallback scope match the approved plan.
-   - `reproducibility`: seed, deterministic setup, dependency/runtime record, and rerun consistency.
-   - `output_contract`: saved tables/metrics/figures, valid run summary, comparable main/baseline metrics, degeneracy evidence, and fallback-trigger state.
-   - `feature_and_leakage` when applicable: split-before-fit preprocessing, chronological/forecast-time availability, target leakage, retained/dropped-variable agreement, and selection stability evidence.
-4. Add other risk-specific checks only when relevant, such as constraint feasibility, numerical stability, or scale. A material unexplained degradation against the usable baseline is a finding, not an invitation to switch methods inside review.
-5. If asked to fix findings, make minimal changes, rerun affected checks, and record the repair. Otherwise report findings without changing code.
-6. Save `code/Qx/reviews/qx_python_review.json`.
-
-# Review Schema
-
-```json
-{
-  "schema_version": 1,
-  "question_id": "Q1",
-  "language": "python",
-  "reviewed_files": [],
-  "decision_id": "q1_method_choice",
-  "checks": {
-    "syntax": {"status": "PASS", "evidence": []},
-    "input_contract": {"status": "PASS", "evidence": []},
-    "method_alignment": {"status": "PASS", "evidence": []},
-    "reproducibility": {"status": "PASS", "evidence": []},
-    "output_contract": {"status": "PASS", "evidence": []},
-    "feature_and_leakage": {"status": "NOT_APPLICABLE", "evidence": [], "reason": "no learned feature transformation"}
-  },
-  "findings": [],
-  "verdict": "PASSED",
-  "reviewed_at": "ISO-8601"
-}
-```
-
-Statuses are `PASS`, `FAIL`, or `NOT_APPLICABLE` with a reason. Any required `FAIL` blocks G3.
-
-# Rules
-
-- Do not pad evidence to reach a count.
-- Do not fabricate execution or outputs.
-- Do not approve a toy diagnostic reference as the official baseline.
-- Do not silently change mathematical meaning.
-- Save the review JSON; retain the runner's execution log/receipt without duplicating it.
-- Treat code newer than its review as requiring the affected checks to rerun, not necessarily the entire pipeline.
-
-# Verification
-
-- Every required named check has concrete evidence.
-- Main and baseline are approved and comparable.
-- Run summary and on-disk outputs agree.
-- Applied preprocessing and variable set agree with the feature contract, with no validation/test leakage when applicable.
-- Review verdict follows check statuses.
+用户要求“审查/诊断”时只报告；用户要求完成求解时可自动修复语法、路径、I/O 等不改变数学含义的问题，并以新 run 重跑。方法、数据口径、指标或声明变化交回运行器，不在审查器内批准。

@@ -1,62 +1,24 @@
-# Runtime revision 2 执行契约
+# Runtime revision 3
 
-manifest 的 schema_version 保持 1；runtime_revision 为 2。旧会话用 `workflow.py migrate` 保存历史快照并重新验证。现有产物不会仅因文件存在被自动接受。
+模板、运行器和生产 Skill 共用 `assets/artifact-contracts.json`。每个 JSON 产物必须具备 `schema_version`、明确 `status`、真实来源路径和契约规定字段；省略项写理由。`workflow.py` 在 `finish` 时按输出索引执行契约检查。
 
-本文件描述可执行字段和操作；公共政策统一见 [项目 AGENTS.md](../../../../AGENTS.md)。
+## 关键产物
 
-## 调用和依赖
+| 阶段 | 权威产物 | 最小语义 |
+|---|---|---|
+| problem-frame | `planning/problem_contract.json` | 题目来源、全局目标、每问目标/输出/类型/数据/依赖、实质歧义 |
+| data-audit | `data_profile.json` + `source_registry.json` | 模式、输入、质量、每问 readiness；无数据须有理由 |
+| method-screen | `method_contract.json` | main、reference_policy、rationale、task_type、required_checks |
+| model-run | `run_summary.json` | primary result、方法结果、科学检查、execution receipt、环境和种子 |
+| code-review | `*_review.json` | status、reviewed_run、checks、evidence_files |
+| run-assessment | `*_run_assessment.json` | `ready_for_robustness` 或 `needs_repair`、归因、风险处理、证据 |
+| result-synthesis | `*_result_evidence.json` | 结果、reference、鲁棒性、限制、证据 |
+| claim_freeze | `frozen_numbers.json` | 声明范围、来源定位和拟冻结 claims；决定另存 JSONL |
+| submission-audit | `paper/audits/submission_audit.json` | 完整性、一致性、哈希、交付和渲染证据 |
+| quality-audit | `paper/qa_report.json` | 最终抽样、证据、未解决项 |
 
-`start --question Qx --step ...` → 专业 Skill 生成真实产物 → `finish`。全局步骤用 GLOBAL；next 返回正确的负责人。所有声明的检查器必须执行，错误或未知检查阻止完成。
+`reference_policy.role` 可为 `empirical_baseline`、`heuristic`、`historical`、`previous_policy`、`small_instance_oracle`、`analytic_check` 或 `none_with_reason`。只有比较声明要求执行可比 reference 和 comparison contract。
 
-scope=global 的解析、分类、数据只做一次；全局引用、编译和审计等待全部问题的分节完成。depends_on 可引用 Q1:result-verdict；配置 question_dependencies={"Q2":["Q1"]} 表示 Q2 的方法筛选依赖 Q1 被接受的结果。循环依赖在初始化时拒绝。另一问等待人工判断时，可推进独立机械动作。
+## 人工决定
 
-配置优先级：显式初始化参数 > session_config > profile 模板。运行记录固定解析配置和模板快照。配置改变后运行 reconfigure；只改论文格式保留模型，改变模型配置重验证上游。lean 可以升级为 submission。
-
-deadline_at 是带时区 ISO 时间。research_budget_minutes 默认 30，paper_reserve_minutes 默认 180。检索到预算即记录缺口并交接；后续针对具体疑问补查。临近截止优先完成最低可用答案并保护写作时间，不能自动批准决定。
-
-## 最小机器证据
-
-| 产物 | 必需内容 |
-|---|---|
-| problem_parse.json | subquestions、material_ambiguities（无歧义为空列表）、题目引用放 input_files |
-| problem_classification.json | subquestions |
-| data_profile.json | data_mode、input_files、quality_findings；无数据时 no_data_reason |
-| source_registry.json | sources；无外部来源时空列表及 reason |
-| method_contract.json | main、usable_baseline、rationale、task_type、required_checks |
-| qx_foundations.json | assumptions、symbols、preparation、derivations |
-| run_summary.json | status、question_id、experiment_id、methods、comparison_contract、primary_metric、task_type、scientific_checks、random_seed、environment、execution |
-| 代码审查 JSON | status、evidence_files、checks |
-| 鲁棒性 JSON | status、evidence_files、findings、limitations |
-| figure_manifest.json | status、figures、evidence_files；无图时 omission_reason |
-| 审计 JSON | status=passed、evidence_files、unresolved=[]，与同名 Markdown 一致 |
-
-预测检查 temporal_split、availability_time；优化检查 feasibility、constraint_residuals、solver_status；机理检查 units、identifiability；评价检查 weight_sensitivity；分类/回归检查 heldout_evaluation；仿真检查 replication_stability。每项 scientific_checks 为 `{status:"passed", evidence_files:[...]}`；其他题型由方法契约明确 required_checks。机器检查不能证明数学推导正确，代理仍需专业核对。
-
-input_files、output_files、evidence_files、source_file、local_path 等显式路径递归登记内容哈希。输出、输入或依赖变化撤销下游允许动作，修改时间不能绕过。
-
-## 活动上下文
-
-`context --question Qx` 或 `context --all` 生成 `planning/context/Qx_active_context.json` 与 `.md`。它们是可删除、可重建的恢复索引；字段、刷新时机和真实性规则见 [活动上下文索引](active-context.md)。
-
-状态更新命令自动刷新；`status` 与 `next` 也会根据当前权威文件重建。刷新失败会在命令结果的 `context_refresh` 中报告，但不会把旧缓存提升为有效证据。恢复工作前必须重新生成，随后仍按 `next_action` 打开真实输入。
-
-## 决定和迭代
-
-当前证据准备好后用 `decision-context --question Qx --step ...` 获取 evidence_hashes。用户实际答复的 JSONL 包含 decision_id、decision_type、question_id、decided_by=human、status=DECIDED、user_message（真实答复或会话消息引用）、decided_at、choice、evidence_hashes；结果决定另含 experiment_id。
-
-- framing_choice、method_choice、package_signoff 使用 choice=accept；selected_method 记录具体方法并与契约一致。
-- result_verdict 使用 accept/adjust/reject/fallback；调整记录 diagnosis（data/feature/method/parameter/implementation/metric）和 rerun_from，用户未说明理由时 rationale 为 null。更换方法回到方法筛选和确认。
-
-人工决定与 AI 分析的区分遵循项目 AGENTS.md「自动推进与人工判断」。
-
-`rerun --from-step ... --new-experiment` 新建运行目录并保留旧实验。Git 的接受/拒绝必须验证实际账本和实验绑定。冻结证据改变需记录解冻并重新冻结；纯排版不重跑模型。
-
-## 展示和交付
-
-运行 → 审查 → 结果分析 → 鲁棒性 → [求解过程展示](../../modeling-results-presenter/SKILL.md) → 用户结果判断 → 方法解释 → 冻结 → 图表 → 分节初稿 → 润色 → 全局引用 → 编译/导出 → 视觉检查 → 三层审计。
-
-展示稿 presentation.json/MD 中的数字绑定真实文件和 JSON 定位；先展示内容，后请用户判断。初稿写 paper/drafts，润色写 paper/sections，避免修改上游已验证文件。Word/Overleaf 改动回到本地权威源后重跑受影响写作与编译；数值声明改变另行解冻。
-
-paper/visual_review.json 的 files 映射覆盖 main.pdf 及需要的 DOCX。每项包括 sha256、status=passed、reviewer、reviewed_at、page_count、pages_reviewed（全部页面）、checks（equations/figures/citations/pagination/contest_format 均 true）。实际逐页核对后才可写 passed。结构检查 visual_check_pending 允许进入视觉核验，但不能通过 G6。
-
-export 只接受当前完整通过的会话，包含来源注册表、清洗/特征和论文，排除原始数据与缓存。--overleaf 只打包 TeX、引用和资源，main.tex 位于包根。交付前在干净临时目录编译该包。
+仅保留 `framing_choice`、`method_choice`、`result_verdict` 和 `claim_freeze` 四类。决定必须由 `record-decision` 保存真实用户原话、typed choice、当前证据哈希；不在 Skill 间传递隐含批准。

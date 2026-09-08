@@ -15,7 +15,6 @@ from pathlib import Path
 import workflow as w
 
 GIT_SCRIPT = w.SKILL_DIR.parent / "git-experiment-manager/scripts/experiment_git.py"
-PRESENTER = w.SKILL_DIR.parent / "modeling-results-presenter/scripts/present_results.py"
 
 MODEL = r'''
 import csv, json, math, hashlib, sys
@@ -42,7 +41,7 @@ output.write_text(json.dumps({"slope":slope,"intercept":intercept,"rmse":main,"b
 rel = output.relative_to(root).as_posix()
 h = lambda b: hashlib.sha256(b).hexdigest()
 contract = {"question_id":q,"data_hash":h(data_file.read_bytes()),"split_hash":h(b"first12/rest"),"feature_spec_hash":h(b"x"),"metric_definition_hash":h(b"rmse"),"target_hash":h(b"y"),"evaluation_rows_hash":h(b"12:20"),"population_hash":h(b"synthetic")}
-methods = [{"method_id":name,"role":role,"status":"success","metrics_summary":{"rmse":value},"output_files":[rel],"degeneracy_check":{"status":"passed","reason":"slope nonzero; predictions vary"}} for name,role,value in [("ols","main",main),("mean","usable_baseline",baseline)]]
+methods = [{"method_id":name,"role":role,"status":"success","metrics_summary":{"rmse":value},"output_files":[rel],"degeneracy_check":{"status":"passed","reason":"slope nonzero; predictions vary"}} for name,role,value in [("ols","main",main),("mean","empirical_baseline",baseline)]]
 task = "regression" if q == "Q1" else "forecasting"
 checks = ["heldout_evaluation"] if q == "Q1" else ["temporal_split","availability_time"]
 audit = folder / "evaluation_audit.json"
@@ -113,21 +112,29 @@ def produce(root, action, choice="accept"):
     step = nodes[action.get("node", f"{q}:{sid}")]
     out = step["outputs"]
     summary = f"results/{q}/experiments/{iteration}/run_summary.json"
-    if sid == "problem-parse":
-        json_file(root, out[0], {"subquestions": run["questions"], "material_ambiguities": [], "input_files": ["workspace/data/clean.csv"]})
+    if sid == "problem-frame":
+        json_file(root, out[0], {
+            "schema_version": 1, "status": "ready", "source_files": ["workspace/data/clean.csv"],
+            "global_goal": "estimate and forecast a synthetic linear relationship", "material_ambiguities": [],
+            "subquestions": [{"id": x, "goal": "fit" if x == "Q1" else "forecast", "required_outputs": ["estimate"],
+                              "success_criteria": ["traceable held-out result"], "constraints": [], "dependencies": [],
+                              "primary_type": "regression" if x == "Q1" else "forecasting"} for x in run["questions"]],
+        })
     elif sid == "framing-check":
         pass
-    elif sid == "problem-classify":
-        json_file(root, out[0], {"subquestions": {x: "regression" if x == "Q1" else "forecasting" for x in run["questions"]}})
     elif sid == "data-audit":
-        json_file(root, out[0], {"data_mode": "synthetic_test", "input_files": ["workspace/data/clean.csv"], "quality_findings": ["20 rows, fixed units, no missing values"]})
-        json_file(root, out[1], {"sources": [], "reason": "explicit synthetic integration test; no external data"})
+        json_file(root, out[0], {"schema_version": 1, "status": "ready", "data_mode": "synthetic_test", "input_files": ["workspace/data/clean.csv"], "quality_findings": ["20 rows, fixed units, no missing values"], "question_readiness": {x: "ready" for x in run["questions"]}})
+        json_file(root, out[1], {"schema_version": 1, "sources": [], "reason": "explicit synthetic integration test; no external data"})
     elif sid == "academic-evidence-scan":
         json_file(root, out[0], {"search_log": [{"query": "synthetic OLS fixture", "provider": "test fixture, no external search", "searched_at": w.now(), "outcome": "no external source required for known synthetic formula"}], "findings": [], "gaps": ["not a real literature search"], "stop_reason": "isolated numerical integration test"})
     elif sid == "method-screen":
         text_file(root, out[0], "Use OLS with training-mean baseline; known synthetic linear generator.\n")
         json_file(root, out[1], {"status": "passed", "finding": "training x variance is positive"})
-        json_file(root, out[2], {"main": "ols", "usable_baseline": "training_mean", "rationale": "known linear synthetic structure", "task_type": "regression", "required_checks": ["heldout_evaluation"]})
+        json_file(root, out[2], {"schema_version": 1, "status": "ready_for_decision", "question_id": q,
+                                "main": {"id": "ols", "family": "linear_regression"},
+                                "reference_policy": {"role": "empirical_baseline", "required": True, "id": "training_mean"},
+                                "rationale": "known linear synthetic structure", "task_type": "regression" if q == "Q1" else "forecasting",
+                                "required_checks": ["heldout_evaluation"] if q == "Q1" else ["temporal_split", "availability_time"]})
     elif sid == "git-experiment":
         # Real experiment branch. Keep each question's numerical artifacts in its own folder.
         branch = w.git_context(root)["branch"]
@@ -135,17 +142,25 @@ def produce(root, action, choice="accept"):
             cli(root, GIT_SCRIPT, "--workspace", str(root), "start", "--contest", "smoke", "--question", q, "--algorithm", "ols")
         json_file(root, out[0], {"branch": w.git_context(root)["branch"], "parent_commit": w.git_context(root)["commit"], "question_id": q, "experiment_id": iteration})
     elif sid == "model-foundations":
-        json_file(root, out[0], {"assumptions": ["linear conditional mean"], "symbols": {"x": "input", "y": "response"}, "preparation": ["fixed training/test split"], "derivations": ["OLS normal equations"]})
-    elif sid == "code-plan":
-        text_file(root, out[0], "Execute committed code/model.py; train first 12 rows, evaluate remaining 8; compare mean baseline.\n")
+        json_file(root, out[0], {"schema_version": 1, "status": "ready", "question_id": q,
+                                "assumptions": ["linear conditional mean"], "symbols": {"x": "input", "y": "response"},
+                                "preparation": ["fixed training/test split"], "derivations": ["OLS normal equations"],
+                                "validation_plan": ["held-out RMSE"]})
+    elif sid == "implementation-spec":
+        json_file(root, out[0], {"schema_version": 1, "status": "ready", "question_id": q,
+                                "modules": ["code/model.py"], "inputs": ["workspace/data/clean.csv"],
+                                "outputs": [summary], "checks": ["held-out evaluation"]})
     elif sid == "model-run":
         cli(root, GIT_SCRIPT, "--workspace", str(root), "run", "--experiment-id", iteration, "--summary", summary,
             "--code-paths", "code/model.py", "--inputs", "workspace/data/clean.csv", "--", sys.executable, "code/model.py", q, iteration)
     elif sid == "code-review":
-        json_file(root, out[0], {"status": "passed", "evidence_files": [summary, "code/model.py"], "checks": {"heldout": "first12/rest", "preprocessing": "train_only"}})
-    elif sid == "result-report":
-        values = w.read_json(root / summary)["primary_metric"]
-        text_file(root, out[0], f"Heldout {values['name']} = {values['value']}; compare training mean in run summary.\n")
+        json_file(root, out[0], {"schema_version": 1, "status": "passed", "question_id": q, "experiment_id": iteration,
+                                "reviewed_run": summary, "evidence_files": [summary, "code/model.py"],
+                                "checks": {"heldout": "first12/rest", "preprocessing": "train_only"}})
+    elif sid == "run-assessment":
+        json_file(root, out[0], {"schema_version": 1, "status": "ready_for_robustness", "question_id": q,
+                                "experiment_id": iteration, "findings": ["run and scientific checks passed"],
+                                "risk_disposition": {"window_length": "test in robustness"}, "evidence_files": [summary]})
     elif sid == "robustness":
         # Refit several actual windows; no fabricated sensitivity metric.
         import csv
@@ -153,22 +168,34 @@ def produce(root, action, choice="accept"):
         with (root / "workspace/data/clean.csv").open(newline="") as handle:
             rows = list(csv.DictReader(handle))
         slopes = [linear_regression([float(r['x']) for r in rows[:n]], [float(r['y']) for r in rows[:n]]).slope for n in (9, 10, 11, 12)]
-        json_file(root, out[0], {"status": "passed", "evidence_files": [summary, "workspace/data/clean.csv"], "findings": {"window_slopes": slopes, "range": max(slopes)-min(slopes)}, "limitations": "synthetic generator only"})
-    elif sid == "results-presentation":
-        json_file(root, out[0], make_presentation(root, q, iteration))
-        cli(root, PRESENTER, "--workspace", str(root), "--spec", out[0], "--index")
+        json_file(root, out[0], {"schema_version": 1, "status": "passed", "question_id": q, "experiment_id": iteration,
+                                "coverage": ["training-window sensitivity"], "evidence_files": [summary, "workspace/data/clean.csv"],
+                                "findings": {"window_slopes": slopes, "range": max(slopes)-min(slopes)}, "limitations": ["synthetic generator only"]})
+    elif sid == "result-synthesis":
+        values = w.read_json(root / summary)["primary_metric"]
+        result_file = f"results/{q}/experiments/{iteration}/estimates.json"
+        json_file(root, out[0], {"schema_version": 1, "status": "ready_for_decision", "question_id": q,
+                                "experiment_id": iteration,
+                                "results": [{"text": f"held-out {values['name']}={values['value']}", "source_file": summary,
+                                             "source_locator": "$.primary_metric.value"}],
+                                "reference_evaluation": {"role": "empirical_baseline", "source_file": result_file},
+                                "robustness": {"source_file": f"robustness/{q}/{q.lower()}_robustness_summary.json"},
+                                "limitations": ["synthetic fixture"], "evidence_files": [summary, result_file]})
     elif sid == "method-explanation":
-        text_file(root, out[0], (root / f"results/{q}/experiments/{iteration}/presentation.md").read_text(encoding="utf-8"))
+        text_file(root, out[0], "OLS is fit on the training block and evaluated on the held-out block; see canonical result evidence.\n")
     elif sid == "freeze":
         value = w.read_json(root / summary)["primary_metric"]["value"]
         text_file(root, out[0], "Accepted synthetic OLS evidence; no claims beyond this generated dataset.\n")
-        json_file(root, out[1], {"claims": [{"claim_id": "rmse", "value": value, "source_file": summary, "source_locator": "$.primary_metric.value", "decision_id": f"TEST-{q}-package_signoff"}]})
+        json_file(root, out[1], {"schema_version": 1, "status": "proposed", "question_id": q,
+                                "claim_scope": "synthetic fixture only", "evidence_files": [summary],
+                                "claims": [{"claim_id": "rmse", "value": value, "source_file": summary, "source_locator": "$.primary_metric.value"}]})
     elif sid == "figure-plan":
-        text_file(root, out[0], "This small integration fixture uses numeric results; no figure is necessary.\n")
+        json_file(root, out[0], {"schema_version": 1, "status": "passed", "question_id": q, "items": [],
+                                "omission_reason": "small numerical fixture has no figure requirement"})
     elif sid == "figures":
-        json_file(root, out[0], {"status": "passed", "figures": [], "omission_reason": "small numerical fixture has no figure requirement"})
+        json_file(root, out[0], {"schema_version": 1, "status": "passed", "question_id": q, "figures": [], "omission_reason": "small numerical fixture has no figure requirement"})
     elif sid == "paper-section":
-        text_file(root, out[0], (root / f"results/{q}/experiments/{iteration}/presentation.md").read_text(encoding="utf-8"))
+        text_file(root, out[0], (root / f"methods/{q}/{q.lower()}_final_method_explanation.md").read_text(encoding="utf-8"))
     elif sid == "paper-polish":
         source = root / f"paper/drafts/{q.lower()}.md"
         if not source.exists():
@@ -215,7 +242,7 @@ def run_smoke():
         initialize(root, "submission")
         sequence, pauses, pending = advance(root, "markdown-build")
         assert sequence.index("Q1:result-verdict") < sequence.index("Q2:method-screen")
-        assert sequence.index("Q1:results-presentation") < sequence.index("Q1:result-verdict")
+        assert sequence.index("Q1:result-synthesis") < sequence.index("Q1:result-verdict")
         assert pending["step"] == "markdown-build"
         values = {q: w.read_json(root / f"results/{q}/experiments/round1/run_summary.json")["primary_metric"]["value"] for q in ("Q1", "Q2")}
         contexts = {q: w.read_json(root / f"planning/context/{q}_active_context.json") for q in ("Q1", "Q2")}
@@ -227,6 +254,6 @@ def run_smoke():
         changed.write_text(changed.read_text() + "20,41\n")
         state = w.cmd_status(root, argparse.Namespace(question=None))
         assert all(not q["allowed"]["paper_writing"] for q in state["questions"])
-        return {"status": "PASSED", "runtime_check": "PASSED", "rerun_next": "model-run", "scope": "real two-question computation, receipts, presentation, decisions, freeze and paper sections",
+        return {"status": "PASSED", "runtime_check": "PASSED", "rerun_next": "model-run", "scope": "real two-question computation, receipts, result evidence, decisions, freeze and paper sections",
                 "steps": sequence, "observed_path_pauses": pauses, "metrics": values, "upstream_mutation_invalidated": True,
-                "publication": "NOT TESTED HERE: real PDF/DOCX rendering and visual review remain separate acceptance tests"}
+                "publication": "NOT TESTED HERE: real PDF/DOCX rendering and submission-audit render evidence remain separate acceptance tests"}

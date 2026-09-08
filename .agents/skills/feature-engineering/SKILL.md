@@ -44,7 +44,7 @@ description: 为数学建模任务设计、拟合、筛选和审计衍生特征�
 - 回归诊断、VIF、残差与计量特征：`statsmodels`。
 - 已验证机器学习模型的归因：`shap`。
 - 空间特征：`geopandas`；图结构特征：`networkx`。
-- 时间滞后、滚动窗口和外生变量可用性：`forecasting-single-series`。
+- 时间滞后、滚动窗口和外生变量可用性：`skforecast-recursive-direct`。
 - 特征消融、参数敏感性与跨场景稳定性：`robustness-checker`。
 
 ## 规范输出

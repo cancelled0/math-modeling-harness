@@ -41,7 +41,7 @@ class ActiveContextTest(unittest.TestCase):
             self.assertEqual(before_md, md_path.read_bytes())
             data = json.loads(before_json)
             self.assertEqual(data["canonicality"]["role"], "derived_cache")
-            self.assertEqual(data["next_action"]["step"], "problem-parse")
+            self.assertEqual(data["next_action"]["step"], "problem-frame")
             self.assertIn("planning/workflow_run.json", data["source_sha256"])
             self.assertIn("唯一下一动作", before_md.decode("utf-8"))
 
@@ -105,7 +105,7 @@ class ActiveContextTest(unittest.TestCase):
 
             w.cmd_resume(root, argparse.Namespace())
             resumed = w.read_json(root / "planning/context/Q1_active_context.json")
-            self.assertEqual(resumed["next_action"]["step"], "problem-parse")
+            self.assertEqual(resumed["next_action"]["step"], "problem-frame")
             self.assertEqual(resumed["blockers"], [])
 
     def test_git_experiment_start_refreshes_active_context(self) -> None:

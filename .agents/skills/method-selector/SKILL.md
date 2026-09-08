@@ -1,160 +1,30 @@
 ---
 name: method-selector
-description: Build and risk-screen a compact role-based method shortlist for a mathematical-modeling subquestion. Use after problem framing and data profiling, before model code generation, to propose a main candidate, a usable baseline, and at most one conditional fallback without padding the pool.
+description: Propose a compact, evidence-backed main method, an applicable reference role, and at most one conditional fallback, then present the genuine method choice for human decision.
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# Purpose
+# 方法筛选
 
-Convert the framed problem and data profile into a small executable decision surface. Screen methods for load-bearing data, assumption, degeneracy, sensitivity, and scale risks before asking the human to choose.
+输入为 `planning/problem_contract.json`、当前数据概况、按需特征审计和可用证据摘要。方法选择前不要求完整的方法假设或全局符号表；只使用问题层约束、单位和成功标准。
 
-This skill proposes and probes methods. The human chooses the method.
+## 筛选
 
-# Preconditions
+1. 从输出、硬约束、数据特征、验证标准、解释负担、时限和计算资源推导方法要求。
+2. 提出一个 `main`。只有在比较声明或实际决策需要时才配置 `reference`：可为经验基线、启发式、历史方案、小规模精确解或解析校验；没有合适参考时使用 `none_with_reason`。
+3. 最多保留一个数学结构确有不同、且有明确触发条件的 fallback。不要为凑数量增加候选。
+4. 先做题面、数据和假设层风险审查。只有低成本探针能明显区分可用性时才运行临时 probe；需要非平凡实现时，记录待验证风险，留到人类选定方法后的正式实验。
+5. 若用户没有给出会实质改变方法的偏好，直接基于题意和证据筛选；只有缺少负载型取舍时才先问一次，不默认增加“筛选前偏好”检查点。
 
-- G1 problem framing passed.
-- Required output and evaluation criteria are known.
-- Relevant data inventory or audit exists.
-- `planning/symbol_table.md` and `planning/model_assumptions.md` exist when the problem needs them.
+## 输出
 
-If these are missing, return to the producer skill rather than guessing.
+同时生成：
 
-# Inputs
+- `methods/Qx/qx_method_card.md`：供人阅读的紧凑选择面；
+- `methods/Qx/probes/risk_probe_summary.json`：可为空探针列表并说明为何无需执行；
+- `methods/Qx/method_contract.json`：机器权威，字段遵循 `workflow-orchestrator/assets/artifact-contracts.json` 的 method-screen 契约。
 
-- Problem parse and classification.
-- Data audit, including missingness, effective sample size, imbalance, cardinality, and distribution summaries.
-- Literature analysis when available.
-- `workspace/features/Qx/qx_feature_spec.json` and `qx_feature_audit.json` when derived features, indicators, or variable reduction are load-bearing.
-- Contest deadline, implementation language, interpretability needs, and compute limits.
-- `planning/session_config.json`.
-- Existing `methods/Qx/qx_method_card.md` and decision ledger when revising.
+随后在对话中给出一次方法选择卡。用户答案由 `workflow-orchestrator record-decision` 记录；本 Skill 不创建 pending 文件，不替用户选择，也不补写用户理由。
 
-# Workflow
-
-1. **Align the decision surface.**
-   - Invoke `decision-prompt-builder` before generating an open-ended shortlist.
-   - Ask about human-owned trade-offs, not algorithm names.
-   - Reuse answers already present in the decision ledger.
-
-2. **Derive method requirements.**
-   - Start from required output, hard constraints, data characteristics, validation criteria, explanation burden, and experiment budget.
-   - Identify the failure modes that would make a method unusable.
-
-3. **Create a role-based shortlist.**
-   - One `main_candidate`: best fit to the chosen trade-off.
-   - One `usable_baseline`: completes the real task and yields directly comparable outputs.
-   - At most one `conditional_fallback`: differs in a meaningful mathematical way and has an explicit activation trigger.
-   - If a simple reference cannot complete the real task, label it `diagnostic_reference`; it does not satisfy the baseline requirement.
-   - Do not add a method merely to reach a candidate count.
-   - Choose method families and roles here. A library-specific Skill may support a bounded feasibility/risk check, but it must not choose the method or expand every candidate into full code.
-
-4. **Define method-specific risk checks.**
-   - Use the contract in `references/risk-probe-contract.md`.
-   - Select only relevant assumption checks.
-   - Always check output degeneracy or concentration with metrics appropriate to the output.
-   - Bound probe runtime rather than source-line count.
-
-5. **Run the risk probe on the main candidate and usable baseline.**
-   - Use a representative slice or full-data diagnostic as appropriate; never rely only on the first rows.
-   - The probe may use reusable scripts and may save detailed metrics, but its canonical output is one compact summary.
-   - Probe the fallback only enough to establish that its trigger and risk profile are credible. Do not fully implement it.
-
-6. **Write canonical artifacts.**
-   - `methods/Qx/qx_method_card.md`
-   - `methods/Qx/probes/risk_probe_summary.json`
-   - Update `planning/manifests/Qx.json` if present.
-
-7. **Ask for the method choice.**
-   - Present the probe evidence through a choice card.
-   - After the user answers, hand the exact answer to `modeler-decision-logger` for append-only capture in `methods/Qx/qx_decisions.jsonl`.
-   - If no answer is available, stop. Do not create a placeholder decision file.
-
-# Method Card Contract
-
-`qx_method_card.md` stays compact and contains:
-
-```markdown
-# Qx Method Card
-
-## Goal and success criteria
-
-## Human constraints
-- Output form:
-- Priority:
-- Unacceptable failure:
-- Experiment budget:
-
-## Shortlist
-| ID | Role | Mathematical idea | Why eligible | Main risk | Implementation cost |
-
-## Baseline validity
-- Real task completed:
-- Comparable output/metric:
-- If no, classification: diagnostic_reference
-
-## Risk-probe summary
-| ID | Executability | Data/assumptions | Degeneracy | Sensitivity | Scale | Verdict |
-
-## Fallback trigger
-- Trigger:
-- Evidence to evaluate:
-
-## Compact history
-- One line per material change, with decision_id when human-owned.
-```
-
-Do not maintain a separate iteration log for new work.
-
-# Probe Verdicts
-
-- `PASS`: eligible for the human choice.
-- `CONDITIONAL`: eligible only with a stated mitigation or fallback trigger.
-- `FAIL`: not offered as a selectable main or baseline.
-
-A method fails screening when a load-bearing assumption fails, the output degenerates, it cannot produce a legal result, or its cost violates the user's budget. A method does not fail merely because an irrelevant generic diagnostic is unavailable.
-
-# Output and Handoff
-
-After G2 screening:
-
-- If the human choice is absent: return the evidence-backed choice card.
-- If G2.5 is decided: route the approved family to the matching specialist Skill only when formulation or family-specific diagnostics are needed, then hand the method card, probe summary, chosen IDs, applicable feature artifacts, and experiment budget to `model-code-analyzer`.
-- Instruct code generation to implement only the approved main method and usable baseline.
-- Keep the fallback dormant until its recorded trigger fires.
-
-# Rules
-
-- Do not use a fixed candidate count.
-- Do not use source-line count as validation quality.
-- Do not invent missing data fields, constraints, labels, or evaluation metrics.
-- Do not call a nonfunctional toy method a baseline.
-- Do not fully implement all shortlisted methods.
-- Do not select the method or write the human rationale.
-- Keep AI suggestions visibly separate from the human decision.
-
-# Compatibility
-
-When revising an older workspace, read:
-
-- `methods/Qx/qx_method_candidates.md`
-- `methods/Qx/qx_method_iteration_log.md`
-- `methods/Qx/poc/`
-
-Migrate material evidence into the method card and probe summary. Do not require new legacy PoCs or iteration logs.
-
-# References
-
-- Risk checks and summary schema: `references/risk-probe-contract.md`
-- Method-family routing cues: `references/method-family-guide.md`
-
-# Verification
-
-- Shortlist contains a main candidate and a genuinely usable baseline.
-- Optional fallback has a concrete trigger.
-- Main and baseline have evidence-backed probe verdicts.
-- Output-degeneracy checks are present.
-- Method card and probe summary exist.
-- No per-skill pending decision file was created.
-- No code-generation handoff occurs before a human method choice is recorded.
-- Specialist Skills did not replace the human choice or expand unapproved candidates.
+专业库型 Skill 可提供已入围方法的局部可行性信息，但不能扩张候选池或绕过 G2.5。需要风险字段或方法族提示时读取 [风险探针](references/risk-probe-contract.md) 和 [方法族指南](references/method-family-guide.md)。

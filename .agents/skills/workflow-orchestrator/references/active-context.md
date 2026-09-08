@@ -28,7 +28,7 @@ JSON 只投影恢复工作需要的字段：
 - profile、Qx、阶段门、状态和当前步骤；
 - 本问目标、交付物、成功标准和约束；
 - 与当前证据绑定的人工决定；
-- 主方法、可用基线、备选方法；
+- 主方法、reference policy、备选方法；
 - 数据与特征状态；
 - 学术证据扫描的发现、缺口、停止原因与检索数量；
 - 当前实验、运行摘要、指标和 Git 证据提交；
@@ -43,7 +43,7 @@ JSON 只投影恢复工作需要的字段：
 ## 真实性与确定性
 
 - `confirmed_decisions` 只包含 `decided_by=human`、`status=DECIDED` 且仍与当前证据和依赖绑定的最新决定。
-- 展示稿结论只有在当前结果判断有效后进入 `supported_findings`；此前放入 `hypotheses`。
+- 结果证据只有在当前结果综合有效后进入 `supported_findings`；此前放入 `hypotheses`。
 - 当前有效的鲁棒性发现和已冻结声明可进入 `supported_findings`，并保留来源路径与适用范围。
 - `stale_or_rejected` 明示证据变化、步骤失效、旧决定或拒绝实验，避免恢复时误用。
 - `generated.state_sha256` 由投影内容计算；`generated.as_of` 取权威记录中的最近时间，不使用每次运行的当前时间。因此同一权威状态会产生相同文件内容。

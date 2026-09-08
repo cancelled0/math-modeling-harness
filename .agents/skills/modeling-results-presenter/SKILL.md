@@ -1,28 +1,8 @@
 ---
 name: modeling-results-presenter
-description: 在数学建模计算、代码检查和鲁棒性分析之后，按优秀论文的求解过程组织模型假设、准备、推导、逐问模型与算法、结果文件和结论，生成可追溯的结果展示稿，供用户判断后进入冻结与论文写作。
+description: 按用户需要从最终结果证据派生可读的数学建模求解过程和结果展示，不承担默认状态机步骤。
 ---
 
-公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)；本 Skill 仅补充专业操作与产物契约。
+公共规则统一遵循 [项目 AGENTS.md](../../../AGENTS.md)。
 
-# 求解过程与结果展示
-
-读取当前方法契约、模型基础、运行摘要、代码审查和鲁棒性证据。按问题实际结构写出连贯的数学论证，让用户能理解为什么这样建模、如何求解、得到了什么，以及证据在哪里。不要把执行日志或代码说明当作求解过程。
-
-正式流程位于 `robustness` 之后、`result-verdict` 之前；所有试验结论在用户接受及冻结前均标明为待审阅。局部请求也可单独使用。展示本身不增加人工判断类型。
-
-每问编写 `results/Qx/experiments/<experiment_id>/presentation.json`，遵循 [展示契约](references/presentation-contract.md)。内容必须包括：
-
-- 建模假设及依据、影响和验证情况；区分假设与已证明结论。
-- 数据来源、清洗、特征、单位、符号和文献准备；说明实际采用的内容。
-- 模型建立：变量、目标、约束或方程，选型理由及与备选模型的取舍。
-- 数学推导：关键关系、条件和中间结论；无法严格证明时称为经验发现或近似。
-- 求解算法：算法与数学模型分别说明，含参数、停止条件、复现入口。
-- 数值、排名/路径、表格、矩阵、图或解析公式等实际结果及可点击来源；适用时说明单位、基线比较、误差与稳健性。无额外假设或独立推导时说明省略原因，不为满足字段编造内容。
-- 回答题目所问的结论、适用范围、局限和需要用户判断的内容。
-
-AI 可以自主提出推导、物理解释和有证据的评价；把待验证解释明确标为分析建议，不虚构用户理由。仅在确有价值时展示消融、残差、约束残差、不可辨识性或失败方案。
-
-用 `scripts/present_results.py --workspace <赛题目录> --spec <相对JSON路径>` 生成同目录 `presentation.md`。脚本核对数值来源和文件后渲染；`--check` 为只读验证。展示稿可继续同步为论文正文，但论文必须使用最终冻结证据。`--index` 可更新 `results/modeling_results.md`，汇总各问当前展示入口。
-
-在对话中展示主要论证与结论，并提供报告和关键结果的绝对路径链接；只回复“文件已生成”不算完成展示。交给 `decision-prompt-builder` 进行已有的结果接受/调整判断；接受后交给 `final-method-explainer` 和 `solution-package-builder`。
+输入 `method_contract.json`、foundations、`run_summary.json`、`run_assessment.json`、`result_evidence.json` 和 robustness；输出可选 `presentation.json`/`presentation.md`，所有数字绑定源文件和定位。它是派生视图，不覆盖权威结果证据，也不替用户作结果决定；用户需要正式写作时交 `final-method-explainer` 或写作 Skill。

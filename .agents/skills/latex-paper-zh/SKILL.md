@@ -25,7 +25,7 @@ description: 组装、编译和交付检查中文数学建模 LaTeX 论文，并
 6. 若配置为 `latex_primary_docx_mirror`，只有 LaTeX 构建和冻结状态当前有效时，才运行 `scripts/export_docx.py paper/main.tex --output paper/exports/main.docx --report paper/docx_export_report.json`。需要统一 Word 样式时传入受版本控制的 `--reference-doc`。
 7. 运行 `scripts/check_docx_delivery.py paper/exports/main.docx --source-tex paper/main.tex --export-report paper/docx_export_report.json --report paper/docx_delivery_check.json`，校验 OOXML 结构、内容非空以及来源/输出哈希。
 8. 使用文档渲染能力逐页检查 DOCX。若 LibreOffice 等渲染器不可用，只能记录 `passed_with_visual_check_pending`，不得称最终 Word 视觉检查通过。
-9. PDF 和可选 DOCX 一起交给三层审计，核对正文、公式、图表、引用和冻结数字没有跨格式漂移。
+9. PDF 和可选 DOCX 交给 `submission-auditor` 做一次完整性/一致性核对，再由 `quality-assurance-auditor` 做最终抽样。
 
 ## 双交付与 Overleaf 规则
 
@@ -50,4 +50,4 @@ description: 组装、编译和交付检查中文数学建模 LaTeX 论文，并
 - `paper/docx_export_report.json`（含 TeX/DOCX 哈希和工具版本）
 - `paper/docx_delivery_check.json`
 
-完成后交给 `consistency-auditor`。
+完成后交给 `submission-auditor`。

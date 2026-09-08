@@ -36,7 +36,7 @@ ORCHESTRATOR_REQUIRED = (
     "scripts/checks/artifact_check.py",
     "scripts/checks/data_ingest_check.py",
     "scripts/checks/leakage_check.py",
-    "scripts/checks/baseline_check.py",
+    "scripts/checks/method_reference_check.py",
     "scripts/checks/modeling_coverage_check.py",
     "scripts/checks/claim_code_check.py",
     "scripts/checks/frozen_number_check.py",
@@ -57,7 +57,7 @@ LATEX_ZH_REQUIRED = (
     "evals/test_latex_tools.py",
 )
 
-BUILTIN_CHECKS = {"human_decision_check", "git_context_check", "evidence_check", "method_contract_check", "scientific_check", "presentation_check", "audit_check", "visual_check"}
+BUILTIN_CHECKS = {"human_decision_check", "git_context_check", "evidence_check", "scientific_check", "audit_check"}
 
 FORBIDDEN_SKILL_REFS = (
     "choosing-a-forecaster",
@@ -66,6 +66,16 @@ FORBIDDEN_SKILL_REFS = (
     "hyperparameter-optimization",
     "prediction-intervals",
     "troubleshooting-common-errors",
+    "problem-parser",
+    "problem-classifier",
+    "decision-prompt-builder",
+    "modeler-decision-logger",
+    "result-report-generator",
+    "completeness-auditor",
+    "consistency-auditor",
+    "forecasting-single-series",
+    "code-reviewer",
+    "baseline_check",
 )
 
 ALLOWED_PAUSES = {
@@ -137,6 +147,12 @@ def audit() -> tuple[list[str], dict]:
     for rel in ORCHESTRATOR_REQUIRED:
         if not (orchestrator_dir / rel).exists():
             errors.append(f"missing orchestrator file: {rel}")
+    artifact_contracts = {}
+    contract_path = orchestrator_dir / "assets" / "artifact-contracts.json"
+    if not contract_path.exists():
+        errors.append("missing canonical artifact contract")
+    else:
+        artifact_contracts = load_json(contract_path).get("contracts", {})
 
     latex_zh_dir = skill_root / "latex-paper-zh"
     for rel in LATEX_ZH_REQUIRED:
@@ -217,6 +233,9 @@ def audit() -> tuple[list[str], dict]:
             errors.append(f"template {template_name} has invalid default delivery_mode")
         steps = template.get("steps", [])
         step_ids = [step.get("id") for step in steps]
+        gate_order = {name: index for index, name in enumerate(("G0", "G1", "G2", "G2.5", "G3", "G4", "G5", "G6"))}
+        previous_gate = -1
+        checkpoint_count = 0
         if len(step_ids) != len(set(step_ids)):
             errors.append(f"duplicate step ids in {template_name}")
         for step in steps:
@@ -248,8 +267,17 @@ def audit() -> tuple[list[str], dict]:
                     continue
                 if not (orchestrator_dir / "scripts" / "checks" / f"{check}.py").exists():
                     errors.append(f"template {template_name} has missing check: {check}")
+            if step.get("id") in artifact_contracts:
+                for contract in artifact_contracts[step["id"]]:
+                    if contract.get("output_index", 0) >= len(step.get("outputs", [])):
+                        errors.append(f"template {template_name} step {step.get('id')} has no output for artifact contract")
+            current_gate = gate_order.get(step.get("gate_after"), -1)
+            if current_gate < previous_gate:
+                errors.append(f"template {template_name} gates are not monotonic at {step.get('id')}")
+            previous_gate = max(previous_gate, current_gate)
             checkpoint = step.get("checkpoint")
             if checkpoint:
+                checkpoint_count += 1
                 if checkpoint.get("reason") not in ALLOWED_PAUSES:
                     errors.append(f"template {template_name} has invalid checkpoint reason: {checkpoint.get('reason')}")
                 if checkpoint.get("policy") != "never_auto_approve":
@@ -262,6 +290,8 @@ def audit() -> tuple[list[str], dict]:
             errors.append(f"template {template_name} must declare exactly four pause types")
         if any(item.get("policy") != "never_auto_approve" for item in declared):
             errors.append(f"template {template_name} contains an auto-approving checkpoint")
+        if checkpoint_count != 4:
+            errors.append(f"template {template_name} must expose exactly four checkpoint definitions, found {checkpoint_count}")
         template_summaries.append({"template": template_name, "steps": len(steps)})
 
     submission = load_json(orchestrator_dir / "assets" / "cumcm-submission.template.json")

@@ -84,7 +84,7 @@ class SixFixTests(unittest.TestCase):
     def test_decision_and_new_experiment_handoff(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            smoke.initialize(root, "lean", "Q1")
+            smoke.initialize(root, "submission", "Q1")
             smoke.advance(root, "method-choice")
             args = argparse.Namespace(question="Q1", step="method-choice")
             w.cmd_start(root, args)
@@ -99,18 +99,17 @@ class SixFixTests(unittest.TestCase):
             w.cmd_start(root, args)
             w.cmd_record_decision(root, argparse.Namespace(**vars(args), choice="adjust", selected_method=None, user_message="调整实现后再运行", rationale=None, rerun_from="model-run"))
             result = w.cmd_finish(root, args)
-            self.assertEqual(result["next"]["step"], "git-experiment")
+            self.assertEqual(result["next"]["step"], "model-run")
+            self.assertFalse(result["new_branch_required"])
             self.assertEqual(old.read_bytes(), before)
             eid = w.read_json(root / "planning/workflow_run.json")["iterations"]["Q1"]
             summary = f"results/Q1/experiments/{eid}/run_summary.json"
             proc = subprocess.run([sys.executable, str(smoke.GIT_SCRIPT), "--workspace", str(root), "run", "--experiment-id", eid, "--summary", summary, "--code-paths", "code/model.py", "--", sys.executable, "code/model.py", "Q1", eid], capture_output=True, text=True)
-            self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("context", proc.stdout)
-            # Isolated fixture only: save all generated test state before a real branch transition.
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            # Isolated fixture only: save generated state before another run on the same method-family branch.
             subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
             subprocess.run(["git", "commit", "-m", "test: preserve previous attempt"], cwd=root, check=True, capture_output=True)
-            smoke.cli(root, smoke.GIT_SCRIPT, "--workspace", str(root), "start", "--contest", "smoke", "--question", "Q1", "--algorithm", eid, "--from-current")
-            args.step = "git-experiment"
+            args.step = "model-run"
             w.cmd_start(root, args)
             w.cmd_finish(root, args)
             smoke.advance(root, "result-verdict")

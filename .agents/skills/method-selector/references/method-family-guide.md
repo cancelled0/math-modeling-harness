@@ -14,7 +14,7 @@ Use this guide to form a shortlist, not as a menu that must be exhausted.
 - Credible baselines: seasonal naive, last value, moving average, or simple regression selected to match the time structure.
 - Main families: exponential smoothing, ARIMA/SARIMA, regression, tree boosting, small-data grey models.
 - Key risks: leakage, invalid split, short series, nonstationarity, over-capacity, poor interval coverage.
-- Route a chosen single-series family through `forecasting-single-series`; use `statsmodels` for ACF/PACF or ARIMA diagnostics and `scikit-learn` for estimator pipelines.
+- Route a chosen single-series family through `skforecast-recursive-direct`; use `statsmodels` for ACF/PACF or ARIMA diagnostics and `scikit-learn` for estimator pipelines.
 
 ## Optimization
 
@@ -53,4 +53,4 @@ Use this guide to form a shortlist, not as a menu that must be exhausted.
 
 ## No dedicated specialist
 
-When no installed specialist matches the approved family, write an explicit method contract covering equations, inputs, constraints, baseline, metrics, numerical risks, and fallback trigger. After G2.5, hand that contract to `model-code-analyzer` and the appropriate language generator. Do not invent a missing Skill dependency.
+When no installed specialist matches the approved family, write an explicit method contract covering equations, inputs, constraints, reference policy, metrics, numerical risks, and fallback trigger. After G2.5, hand that contract to `model-code-analyzer` and the appropriate language generator. Do not invent a missing Skill dependency.

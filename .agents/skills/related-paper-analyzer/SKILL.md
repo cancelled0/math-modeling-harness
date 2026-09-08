@@ -18,7 +18,7 @@ This skill does not fabricate references, browse for new papers itself, write th
 
 Use this skill:
 
-- After `problem-parser` and `problem-classifier` have produced validated artifacts.
+- After `problem-framer` has produced the validated problem contract.
 - Before `method-selector`.
 - When the team wants to ground method selection in user-supplied literature rather than guessing from model names.
 - When original papers, reports, or extracted paper text are available under `workspace/papers/`.
@@ -27,8 +27,7 @@ Use this skill:
 
 The following should already exist or be provided:
 
-- A validated problem parse.
-- A validated problem classification artifact.
+- A validated `planning/problem_contract.json`.
 - At least one original paper file under `workspace/papers/`.
 
 If no paper originals are present under `workspace/papers/`, do not analyze from memory. When the user requested or authorized external research, route first to `modeling-evidence-collector` and `paper-lookup`; otherwise ask the user to provide originals.
@@ -37,8 +36,7 @@ If no paper originals are present under `workspace/papers/`, do not analyze from
 
 Use or request:
 
-- `planning/parse/problem_parse.json`, if available.
-- `planning/classification/problem_classification.json`, if available.
+- `planning/problem_contract.json`.
 - Original paper files under `workspace/papers/`.
 - User notes about which papers matter most, if available.
 

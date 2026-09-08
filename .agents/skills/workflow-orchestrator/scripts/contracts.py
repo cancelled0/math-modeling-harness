@@ -10,6 +10,7 @@ from scientific_evidence import verify as verify_scientific_evidence
 from pathlib import Path
 
 CHECKS = Path(__file__).parent / "checks"
+ARTIFACT_CONTRACTS = Path(__file__).parents[1] / "assets" / "artifact-contracts.json"
 
 
 def digest(path):
@@ -94,6 +95,45 @@ def finite_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def artifact_contract_errors(step_id, outputs, root):
+    """Validate the canonical lightweight field contract shared by producers and runtime."""
+    spec = load(ARTIFACT_CONTRACTS).get("contracts", {}).get(step_id, [])
+    errors = []
+    for artifact in spec:
+        index = artifact.get("output_index", 0)
+        if index >= len(outputs):
+            errors.append(f"{step_id} contract points outside declared outputs: {index}")
+            continue
+        raw = outputs[index]
+        try:
+            data = load(inside(root, raw))
+        except (OSError, ValueError) as exc:
+            errors.append(str(exc))
+            continue
+        for key in artifact.get("required", []):
+            if key not in data:
+                errors.append(f"{step_id} missing required field: {key}")
+        for key in artifact.get("nonempty", []):
+            if data.get(key) in (None, "", [], {}):
+                errors.append(f"{step_id} requires nonempty field: {key}")
+        for key, choices in artifact.get("allowed_values", {}).items():
+            if key in data and data[key] not in choices:
+                errors.append(f"{step_id} has invalid {key}: {data[key]}")
+        for alternatives in artifact.get("one_of", []):
+            if not any(data.get(key) not in (None, "", [], {}) for key in alternatives):
+                errors.append(f"{step_id} requires one of: {', '.join(alternatives)}")
+        for condition in artifact.get("conditional", []):
+            if condition == "input_files_or_no_data_reason" and not data.get("input_files") and not data.get("no_data_reason"):
+                errors.append("no-data task must explain no_data_reason")
+            elif condition == "items_or_omission_reason" and not data.get("items") and not data.get("omission_reason"):
+                errors.append("empty figure plan must explain omission_reason")
+            elif condition == "figures_or_omission_reason" and not data.get("figures") and not data.get("omission_reason"):
+                errors.append("empty figure manifest must explain omission_reason")
+        if step_id == "run-assessment" and data.get("status") == "needs_repair" and not data.get("rerun_from"):
+            errors.append("repair assessment must declare rerun_from")
+    return errors
+
+
 def evidence_errors(root, data):
     errors = []
     if not isinstance(data.get("search_log"), list) or not data["search_log"]:
@@ -119,9 +159,11 @@ def scientific_errors(root, data):
         errors.append("run must be successful")
     if data.get("feasible") is False:
         errors.append("run is infeasible")
-    metric = data.get("primary_metric", {})
-    if not finite_number(metric.get("value")):
-        errors.append("primary metric must be finite")
+    metric = data.get("primary_metric")
+    if metric is not None and (not isinstance(metric, dict) or not finite_number(metric.get("value"))):
+        errors.append("primary metric must be finite when a scalar metric is declared")
+    if metric is None and data.get("primary_result") in (None, "", [], {}):
+        errors.append("run lacks a primary result")
     if not data.get("execution", {}).get("code_commit") or not data.get("environment") or "random_seed" not in data:
         errors.append("run lacks executed commit, environment or seed")
     receipt_raw = data.get("execution", {}).get("receipt_file")
@@ -164,38 +206,14 @@ def scientific_errors(root, data):
             elif check["verification_mode"] != "computed" and not all(check.get(k) for k in ("reviewer", "rationale")):
                 errors.append(f"review check needs reviewer and rationale: {key}")
     for method in data.get("methods", []):
-        if method.get("degeneracy_check", {}).get("status") != "passed":
-            errors.append("method output degeneracy must be checked")
+        degeneracy = method.get("degeneracy_check")
+        if method.get("degeneracy_required") is True and not degeneracy:
+            errors.append("method requires an output degeneracy check")
+        elif degeneracy and degeneracy.get("status") != "passed":
+            errors.append("declared output degeneracy check did not pass")
     for path, value in fingerprints(root, referenced_files(data)).items():
         if value is None:
             errors.append(f"missing referenced experiment file: {path}")
-    return errors
-
-
-def visual_errors(root, config):
-    path = root / "paper/visual_review.json"
-    if not path.is_file():
-        return ["missing paper/visual_review.json"]
-    data = load(path)
-    files = ["paper/main.pdf"]
-    if config.get("delivery_mode") == "latex_primary_docx_mirror":
-        files.append("paper/exports/main.docx")
-    elif config.get("paper_format") == "word":
-        files.append("paper/main.docx")
-    errors = []
-    for raw in files:
-        row = data.get("files", {}).get(raw, {})
-        target = inside(root, raw)
-        if not target.is_file() or row.get("sha256") != digest(target):
-            errors.append(f"visual review is not bound to current artifact: {raw}")
-        if row.get("status") != "passed" or not row.get("reviewer") or not row.get("reviewed_at"):
-            errors.append(f"visual review is incomplete: {raw}")
-        if not isinstance(row.get("page_count"), int) or row["page_count"] < 1:
-            errors.append(f"visual review lacks page count: {raw}")
-        elif sorted(set(row.get("pages_reviewed", []))) != list(range(1, row["page_count"] + 1)):
-            errors.append(f"not all pages were reviewed: {raw}")
-        if not all(row.get("checks", {}).get(k) is True for k in ("equations", "figures", "citations", "pagination", "contest_format")):
-            errors.append(f"visual review lacks content checks: {raw}")
     return errors
 
 
@@ -206,27 +224,12 @@ def execute(root, step, config):
     if errors:
         return errors
     sid = step["id"]
-    required = {
-        "problem-parse": ("subquestions", "material_ambiguities"),
-        "problem-classify": ("subquestions",),
-        "data-audit": ("data_mode", "input_files", "quality_findings"),
-        "model-foundations": ("assumptions", "symbols", "preparation", "derivations"),
-        "code-review": ("status", "evidence_files", "checks"),
-        "robustness": ("status", "evidence_files", "findings", "limitations"),
-        "figures": ("status", "figures",),
-    }.get(sid, ())
-    if required:
-        data = load(root / outputs[0])
-        errors.extend(f"{sid} missing required field: {key}" for key in required if key not in data)
-        if sid == "data-audit" and not data.get("input_files") and not data.get("no_data_reason"):
-            errors.append("no-data task must explain no_data_reason")
-        if sid == "figures" and not data.get("figures") and not data.get("omission_reason"):
-            errors.append("empty figure plan must explain omission_reason")
+    errors.extend(artifact_contract_errors(sid, outputs, root))
     q = step["question_id"]
     summary = root / step.get("run_summary", f"results/{q}/experiments/round1/run_summary.json")
     commands = {
         "artifact_check": ["--workspace", str(root), "--paths", *outputs],
-        "baseline_check": [str(summary)],
+        "method_reference_check": [str(summary), "--method-contract", str(root / f"methods/{q}/method_contract.json")],
         "modeling_coverage_check": [str(summary)],
         "leakage_check": [str(summary)],
         "data_ingest_check": [str(root / "workspace/data/source_registry.json"), "--workspace", str(root)],
@@ -256,19 +259,9 @@ def execute(root, step, config):
         if name == "scientific_check":
             errors.extend(scientific_errors(root, load(summary)))
             continue
-        if name == "visual_check":
-            errors.extend(visual_errors(root, config))
-            continue
-        if name == "presentation_check":
-            script = CHECKS.parents[2] / "modeling-results-presenter/scripts/present_results.py"
-            command = [sys.executable, str(script), "--workspace", str(root), "--spec", outputs[0], "--check"]
-        elif name == "method_contract_check":
-            data = load(root / outputs[-1])
-            if not all(data.get(k) for k in ("main", "usable_baseline", "rationale", "task_type", "required_checks")):
-                errors.append("method contract lacks main/baseline/rationale/task_type/required_checks")
-            continue
-        elif name == "audit_check":
-            data = load(root / outputs[-1])
+        if name == "audit_check":
+            audit_output = next((raw for raw in reversed(outputs) if raw.endswith(".json")), outputs[-1])
+            data = load(root / audit_output)
             if data.get("status") != "passed" or not data.get("evidence_files") or data.get("unresolved") != []:
                 errors.append("audit must pass with evidence and no unresolved findings")
             continue

@@ -1,448 +1,56 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project_scope": "F:/compititions/数模/.agents/skills",
-  "categories": [
-    "orchestration",
-    "framing-governance",
-    "data-evidence",
-    "method-specialist",
-    "implementation",
-    "evaluation",
-    "communication",
-    "audit"
-  ],
+  "categories": ["orchestration", "framing-governance", "data-evidence", "method-specialist", "implementation", "evaluation", "communication", "audit"],
   "skills": [
-    {
-      "name": "code-reviewer",
-      "category": "implementation",
-      "stage": "G3",
-      "activation": "模型代码生成或修改后按语言路由审查",
-      "outputs": [],
-      "next_skills": ["python-code-reviewer", "matlab-code-reviewer"]
-    },
-    {
-      "name": "completeness-auditor",
-      "category": "audit",
-      "stage": "G6",
-      "activation": "检查当前 profile 的语义证据完整性与时效",
-      "outputs": ["paper/audits/completeness_audit.md"],
-      "next_skills": ["quality-assurance-auditor"]
-    },
-    {
-      "name": "consistency-auditor",
-      "category": "audit",
-      "stage": "G4-G6",
-      "activation": "canonical/frozen 变更或最终跨媒体一致性核对",
-      "outputs": ["results/Qx/reports/scoped_consistency.json", "paper/audits/cross_media_consistency_audit.md"],
-      "next_skills": ["completeness-auditor"]
-    },
-    {
-      "name": "cuopt-numerical-optimization-formulation",
-      "category": "method-specialist",
-      "stage": "G2.5-G3",
-      "activation": "已确认 LP、MILP 或 QP 方法族并需形式化",
-      "outputs": [],
-      "next_skills": ["model-code-analyzer"]
-    },
-    {
-      "name": "data-auditor-cleaner",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "盘点、审计、清洗本地或外部原始数据",
-      "outputs": ["workspace/data/data_report.md", "workspace/data/data_profile.json"],
-      "next_skills": ["feature-engineering", "method-selector"]
-    },
-    {
-      "name": "decision-prompt-builder",
-      "category": "framing-governance",
-      "stage": "G1-G5",
-      "activation": "四类实质人工判断需要紧凑选择卡",
-      "outputs": [],
-      "next_skills": ["modeler-decision-logger"]
-    },
-    {
-      "name": "experimental-design",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "数据尚未采集且需要随机化、区组或处理组合",
-      "outputs": [],
-      "next_skills": ["statistical-power", "data-auditor-cleaner"]
-    },
-    {
-      "name": "exploratory-data-analysis",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "对明确支持的本地数据做有边界的探索分析",
-      "outputs": [],
-      "next_skills": ["data-auditor-cleaner", "feature-engineering"]
-    },
-    {
-      "name": "feature-engineering",
-      "category": "data-evidence",
-      "stage": "G1-G4",
-      "activation": "构建特征、指标体系、变量筛选或机理参数约简",
-      "outputs": ["workspace/features/Qx/qx_feature_spec.json", "workspace/features/Qx/qx_feature_audit.json"],
-      "next_skills": ["method-selector", "model-code-analyzer", "robustness-checker"]
-    },
-    {
-      "name": "figure-table-planner",
-      "category": "communication",
-      "stage": "G4-G5",
-      "activation": "规划支持诊断、比较和论文声明的最小图表集",
-      "outputs": ["methods/Qx/qx_figure_table_plan.md"],
-      "next_skills": ["math-figure-generator", "scientific-visualization"]
-    },
-    {
-      "name": "final-method-explainer",
-      "category": "communication",
-      "stage": "G4",
-      "activation": "最终实验轮获接受后形成权威方法解释",
-      "outputs": ["methods/Qx/qx_final_method_explanation.md"],
-      "next_skills": ["solution-package-builder"]
-    },
-    {
-      "name": "forecasting-single-series",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "单一时间序列的递归或直接多步预测",
-      "outputs": [],
-      "next_skills": ["code-reviewer", "robustness-checker"]
-    },
-    {
-      "name": "geopandas",
-      "category": "method-specialist",
-      "stage": "G1-G3",
-      "activation": "矢量空间数据、CRS、空间连接与区域统计",
-      "outputs": [],
-      "next_skills": ["feature-engineering", "model-code-analyzer"]
-    },
-    {
-      "name": "git-experiment-manager",
-      "category": "implementation",
-      "stage": "G2.5-G4",
-      "activation": "用户确认实现或改变算法，需要版本化实验、比较、接受或恢复",
-      "outputs": ["planning/experiments/Qx/active_experiment.json", "planning/experiment_registry.jsonl"],
-      "next_skills": ["model-code-analyzer", "result-report-generator", "workflow-orchestrator"]
-    },
-    {
-      "name": "latex-paper-en",
-      "category": "communication",
-      "stage": "G5",
-      "activation": "用户明确要求英文 LaTeX 或已有英文 tex 稿",
-      "outputs": [],
-      "next_skills": ["consistency-auditor"]
-    },
-    {
-      "name": "latex-paper-zh",
-      "category": "communication",
-      "stage": "G5-G6",
-      "activation": "冻结后的中文 CUMCM LaTeX 组装、PDF 编译及可选的可追溯 DOCX 镜像交付",
-      "outputs": ["paper/main.tex", "paper/main.pdf", "paper/latex_build_report.json", "paper/latex_delivery_check.json", "paper/exports/main.docx", "paper/docx_export_report.json", "paper/docx_delivery_check.json"],
-      "next_skills": ["consistency-auditor"]
-    },
-    {
-      "name": "math-figure-generator",
-      "category": "communication",
-      "stage": "G4-G5",
-      "activation": "依据已批准计划生成并渲染验证数模图件",
-      "outputs": ["paper/figures/"],
-      "next_skills": ["paper-section-writer", "consistency-auditor"]
-    },
-    {
-      "name": "math-modeling-manager",
-      "category": "orchestration",
-      "stage": "G0-G6",
-      "activation": "完整赛题、模糊请求、跨阶段续作或故障恢复",
-      "outputs": [],
-      "next_skills": ["workflow-orchestrator", "modeling-thought-partner"]
-    },
-    {
-      "name": "matlab-code-reviewer",
-      "category": "implementation",
-      "stage": "G3",
-      "activation": "验证 MATLAB 或北太天元代码、兼容性与结果契约",
-      "outputs": ["code/matlab/Qx/reviews/qx_matlab_review.json"],
-      "next_skills": ["result-report-generator"]
-    },
-    {
-      "name": "matlab-model-code-generator",
-      "category": "implementation",
-      "stage": "G3",
-      "activation": "已批准的 MATLAB/北太天元 code plan 需要实现与运行",
-      "outputs": ["results/Qx/experiments/roundN/run_summary.json"],
-      "next_skills": ["code-reviewer"]
-    },
-    {
-      "name": "method-selector",
-      "category": "method-specialist",
-      "stage": "G2-G2.5",
-      "activation": "问题和数据就绪后筛选主方法、可用基线和条件备选",
-      "outputs": ["methods/Qx/qx_method_card.md", "methods/Qx/probes/risk_probe_summary.json"],
-      "next_skills": ["decision-prompt-builder", "model-code-analyzer"]
-    },
-    {
-      "name": "model-assumptions-builder",
-      "category": "framing-governance",
-      "stage": "G1-G4",
-      "activation": "维护全局和方法特定假设及其影响",
-      "outputs": ["planning/model_assumptions.md"],
-      "next_skills": ["method-selector", "robustness-checker"]
-    },
-    {
-      "name": "model-code-analyzer",
-      "category": "implementation",
-      "stage": "G2.5-G3",
-      "activation": "把人工批准的方法与基线转成语言无关实验契约",
-      "outputs": ["code/Qx/qx_code_plan.md", "code/matlab/Qx/qx_code_plan.md"],
-      "next_skills": ["python-model-code-generator", "matlab-model-code-generator"]
-    },
-    {
-      "name": "modeler-decision-logger",
-      "category": "framing-governance",
-      "stage": "G1-G5",
-      "activation": "用户已经给出建模判断，需要忠实追加记录",
-      "outputs": ["methods/Qx/qx_decisions.jsonl", "planning/framing_decisions.jsonl"],
-      "next_skills": ["workflow-orchestrator"]
-    },
-    {
-      "name": "modeling-evidence-collector",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "采集外部数据、标准、公报、论文和行业报告",
-      "outputs": ["workspace/data/source_registry.json", "workspace/evidence/Qx/evidence_brief.json"],
-      "next_skills": ["paper-lookup", "related-paper-analyzer", "data-auditor-cleaner", "modeling-thought-partner"]
-    },
-    {
-      "name": "modeling-thought-partner",
-      "category": "framing-governance",
-      "stage": "D0-D1",
-      "activation": "用户只讨论、质疑或评价建模思路且暂不执行",
-      "outputs": [],
-      "next_skills": ["math-modeling-manager"]
-    },
-    {
-      "name": "networkx",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "图、路径、流、匹配和网络结构任务",
-      "outputs": [],
-      "next_skills": ["model-code-analyzer", "robustness-checker"]
-    },
-    {
-      "name": "paper-lookup",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "检索论文、引文、DOI 和开放全文",
-      "outputs": [],
-      "next_skills": ["related-paper-analyzer"]
-    },
-    {
-      "name": "paper-polisher",
-      "category": "communication",
-      "stage": "G5",
-      "activation": "证据与内容已定后润色语言、公式、限定语和格式",
-      "outputs": ["paper/sections/"],
-      "next_skills": ["consistency-auditor"]
-    },
-    {
-      "name": "paper-section-writer",
-      "category": "communication",
-      "stage": "G5",
-      "activation": "依据写作包、冻结数字和人工解释，按数学建模论文论证逻辑撰写或重写分节",
-      "outputs": ["paper/drafts/", "paper/sections/"],
-      "next_skills": ["reference-manager", "paper-polisher", "latex-paper-zh", "latex-paper-en"]
-    },
-    {
-      "name": "problem-classifier",
-      "category": "framing-governance",
-      "stage": "G1",
-      "activation": "题目解析后识别每问的输出和结构类型",
-      "outputs": ["planning/classification/problem_classification.json"],
-      "next_skills": ["data-auditor-cleaner", "modeling-evidence-collector", "method-selector"]
-    },
-    {
-      "name": "problem-parser",
-      "category": "framing-governance",
-      "stage": "G1",
-      "activation": "首次读取赛题或题意范围发生实质变化",
-      "outputs": ["planning/parse/problem_parse.json"],
-      "next_skills": ["problem-classifier"]
-    },
-    {
-      "name": "pymc",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "贝叶斯、层次模型、先验敏感性与后验预测",
-      "outputs": [],
-      "next_skills": ["robustness-checker"]
-    },
-    {
-      "name": "pymoo",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "多目标优化、Pareto 前沿和约束处理",
-      "outputs": [],
-      "next_skills": ["result-report-generator", "robustness-checker"]
-    },
-    {
-      "name": "python-code-reviewer",
-      "category": "implementation",
-      "stage": "G3",
-      "activation": "运行、修复和验证 Python 建模代码与证据契约",
-      "outputs": ["code/Qx/reviews/qx_python_review.json"],
-      "next_skills": ["result-report-generator"]
-    },
-    {
-      "name": "python-model-code-generator",
-      "category": "implementation",
-      "stage": "G3",
-      "activation": "已批准的 Python code plan 需要实现与运行",
-      "outputs": ["results/Qx/experiments/roundN/run_summary.json"],
-      "next_skills": ["code-reviewer"]
-    },
-    {
-      "name": "quality-assurance-auditor",
-      "category": "audit",
-      "stage": "G6",
-      "activation": "一致性和完整性审计通过后的最终 submission 质量门",
-      "outputs": ["paper/qa_report.md"],
-      "next_skills": []
-    },
-    {
-      "name": "reference-manager",
-      "category": "communication",
-      "stage": "G5",
-      "activation": "论文引用、BibTeX 和来源真实性需要核验",
-      "outputs": ["paper/refs.bib", "paper/reference_audit.md"],
-      "next_skills": ["paper-polisher"]
-    },
-    {
-      "name": "related-paper-analyzer",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "已有论文原文或可读文本，需要提取可迁移建模线索",
-      "outputs": ["workspace/papers/related_paper_analysis.md"],
-      "next_skills": ["method-selector"]
-    },
-    {
-      "name": "result-report-generator",
-      "category": "evaluation",
-      "stage": "G3-G4",
-      "activation": "有意义的实验、异常或最终结果需要比较与归因",
-      "outputs": ["results/Qx/experiments/roundN/qx_decision_report.md", "results/Qx/reports/qx_final_result_analysis.md"],
-      "next_skills": ["data-auditor-cleaner", "feature-engineering", "method-selector", "robustness-checker", "git-experiment-manager"]
-    },
-    {
-      "name": "modeling-results-presenter",
-      "category": "communication",
-      "stage": "G3-G4",
-      "activation": "计算、代码审查和鲁棒性分析完成后，需要按优秀论文求解过程展示假设、准备、推导、模型、算法、结果文件和结论，供用户判断",
-      "outputs": ["results/Qx/experiments/roundN/presentation.json", "results/Qx/experiments/roundN/presentation.md"],
-      "next_skills": ["decision-prompt-builder", "final-method-explainer", "solution-package-builder"]
-    },
-    {
-      "name": "robustness-checker",
-      "category": "evaluation",
-      "stage": "G4",
-      "activation": "验证消融、敏感性、稳定性、误差和不确定性",
-      "outputs": ["robustness/Qx/qx_robustness_summary.json", "robustness/Qx/qx_robustness_report.md"],
-      "next_skills": ["decision-prompt-builder", "solution-package-builder"]
-    },
-    {
-      "name": "scientific-visualization",
-      "category": "communication",
-      "stage": "G3-G5",
-      "activation": "科学图形设计、实现或可访问性审计",
-      "outputs": [],
-      "next_skills": ["math-figure-generator", "paper-section-writer"]
-    },
-    {
-      "name": "scikit-learn",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "机器学习、聚类、流水线、交叉验证和调参",
-      "outputs": [],
-      "next_skills": ["shap", "code-reviewer", "robustness-checker"]
-    },
-    {
-      "name": "shap",
-      "category": "evaluation",
-      "stage": "G3-G5",
-      "activation": "已验证机器学习模型的归因与解释审计",
-      "outputs": [],
-      "next_skills": ["robustness-checker", "figure-table-planner"]
-    },
-    {
-      "name": "simpy",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "离散事件、资源、排队和过程仿真",
-      "outputs": [],
-      "next_skills": ["robustness-checker"]
-    },
-    {
-      "name": "solution-package-builder",
-      "category": "communication",
-      "stage": "G4-G5",
-      "activation": "组装写作单一来源、获取签署并冻结数值声明",
-      "outputs": ["results/Qx/reports/qx_solution_package_for_writer.md", "results/Qx/reports/frozen_numbers.json"],
-      "next_skills": ["paper-section-writer"]
-    },
-    {
-      "name": "statistical-analysis",
-      "category": "method-specialist",
-      "stage": "G2-G5",
-      "activation": "检验选择、假设检查、效应量与统计解释",
-      "outputs": [],
-      "next_skills": ["statsmodels", "result-report-generator"]
-    },
-    {
-      "name": "statistical-power",
-      "category": "data-evidence",
-      "stage": "G1-G2",
-      "activation": "样本量、统计功效与最小可检测效应规划",
-      "outputs": [],
-      "next_skills": ["experimental-design"]
-    },
-    {
-      "name": "statsmodels",
-      "category": "method-specialist",
-      "stage": "G2.5-G4",
-      "activation": "OLS、GLM、混合模型、ARIMA 和严格诊断",
-      "outputs": [],
-      "next_skills": ["code-reviewer", "robustness-checker"]
-    },
-    {
-      "name": "symbol-table-builder",
-      "category": "framing-governance",
-      "stage": "G1-G5",
-      "activation": "建立全局符号与单位表并解决跨问冲突",
-      "outputs": ["planning/symbol_table.md"],
-      "next_skills": ["model-code-analyzer", "paper-section-writer"]
-    },
-    {
-      "name": "sympy",
-      "category": "method-specialist",
-      "stage": "G2.5-G3",
-      "activation": "精确符号推导、方程求解和表达式转代码",
-      "outputs": [],
-      "next_skills": ["model-code-analyzer"]
-    },
-    {
-      "name": "uncertainty-and-units",
-      "category": "data-evidence",
-      "stage": "G1-G5",
-      "activation": "单位、量纲、测量不确定性和误差传播",
-      "outputs": [],
-      "next_skills": ["model-code-analyzer", "robustness-checker"]
-    },
-    {
-      "name": "workflow-orchestrator",
-      "category": "orchestration",
-      "stage": "G0-G6",
-      "activation": "运行文件型状态机，维护每问 manifest、暂停恢复、失效与一个下一动作",
-      "outputs": ["planning/workflow_run.json", "planning/manifests/Qx.json", "planning/artifacts.json"],
-      "next_skills": ["problem-parser", "modeling-evidence-collector", "data-auditor-cleaner", "method-selector", "git-experiment-manager", "model-code-analyzer", "result-report-generator", "robustness-checker", "modeling-results-presenter", "solution-package-builder", "latex-paper-zh", "quality-assurance-auditor"]
-    }
+    {"name":"cuopt-numerical-optimization-formulation","category":"method-specialist","stage":"G2.5-G3","activation":"已批准 LP/MILP/QP 需要形式化","outputs":[],"next_skills":["model-code-analyzer"]},
+    {"name":"data-auditor-cleaner","category":"data-evidence","stage":"G1-G2","activation":"审计附件、外部数据或无数据任务","outputs":["workspace/data/data_profile.json","workspace/data/source_registry.json"],"next_skills":["feature-engineering","method-selector"]},
+    {"name":"experimental-design","category":"data-evidence","stage":"G1-G2","activation":"观测尚未采集且需要设计","outputs":[],"next_skills":["statistical-power","data-auditor-cleaner"]},
+    {"name":"exploratory-data-analysis","category":"data-evidence","stage":"G1-G2","activation":"用户主动要求局部探索","outputs":[],"next_skills":["data-auditor-cleaner","feature-engineering"]},
+    {"name":"feature-engineering","category":"data-evidence","stage":"G1-G4","activation":"构造特征、指标或约简变量","outputs":["workspace/features/Qx/"],"next_skills":["method-selector","model-code-analyzer","robustness-checker"]},
+    {"name":"figure-table-planner","category":"communication","stage":"G4-G5","activation":"规划最小图表集","outputs":["methods/Qx/qx_figure_table_plan.json"],"next_skills":["math-figure-generator"]},
+    {"name":"final-method-explainer","category":"communication","stage":"G4","activation":"结果证据可供最终解释","outputs":["methods/Qx/qx_final_method_explanation.md"],"next_skills":["solution-package-builder"]},
+    {"name":"geopandas","category":"method-specialist","stage":"G2.5-G3","activation":"几何、CRS、空间连接或区域统计已被批准","outputs":[],"next_skills":["model-code-analyzer"]},
+    {"name":"git-experiment-manager","category":"implementation","stage":"G2.5-G4","activation":"批准方法需要分支、运行和收据","outputs":["planning/experiments/Qx/active_experiment.json"],"next_skills":["model-code-analyzer","workflow-orchestrator"]},
+    {"name":"latex-paper-en","category":"communication","stage":"G5","activation":"英文 LaTeX 交付","outputs":[],"next_skills":["submission-auditor"]},
+    {"name":"latex-paper-zh","category":"communication","stage":"G5","activation":"中文 LaTeX/PDF/DOCX 交付","outputs":["paper/main.tex","paper/main.pdf"],"next_skills":["submission-auditor"]},
+    {"name":"math-figure-generator","category":"communication","stage":"G4-G5","activation":"按已批准计划生成图件","outputs":["paper/figures/"],"next_skills":["paper-section-writer"]},
+    {"name":"math-modeling-manager","category":"orchestration","stage":"G0-G6","activation":"完整任务、续作或跨阶段请求","outputs":[],"next_skills":["workflow-orchestrator","modeling-thought-partner"]},
+    {"name":"matlab-code-reviewer","category":"implementation","stage":"G3","activation":"审查 MATLAB/北太天元运行证据","outputs":["code/matlab/Qx/reviews/"],"next_skills":["result-evaluator"]},
+    {"name":"matlab-model-code-generator","category":"implementation","stage":"G3","activation":"批准的 MATLAB 方法需要实现","outputs":["results/Qx/experiments/run_summary.json"],"next_skills":["matlab-code-reviewer"]},
+    {"name":"method-selector","category":"method-specialist","stage":"G2-G2.5","activation":"问题/数据就绪后筛选方法","outputs":["methods/Qx/method_contract.json"],"next_skills":["workflow-orchestrator","model-assumptions-builder"]},
+    {"name":"model-assumptions-builder","category":"framing-governance","stage":"G2.5-G3","activation":"批准方法需要假设、符号和推导","outputs":["methods/Qx/qx_foundations.json"],"next_skills":["symbol-table-builder","model-code-analyzer"]},
+    {"name":"model-code-analyzer","category":"implementation","stage":"G2.5-G3","activation":"复杂任务需要实现契约","outputs":["code/Qx/qx_implementation_spec.json"],"next_skills":["python-model-code-generator","matlab-model-code-generator"]},
+    {"name":"modeling-evidence-collector","category":"data-evidence","stage":"G1-G2","activation":"需要外部数据、标准或学术依据","outputs":["workspace/evidence/Qx/evidence_brief.json"],"next_skills":["paper-lookup","related-paper-analyzer","data-auditor-cleaner"]},
+    {"name":"modeling-results-presenter","category":"communication","stage":"G3-G4","activation":"用户要求完整求解过程派生视图","outputs":["results/Qx/experiments/presentation.json"],"next_skills":["final-method-explainer"]},
+    {"name":"modeling-thought-partner","category":"framing-governance","stage":"D0-D1","activation":"只讨论、比较或质疑思路","outputs":[],"next_skills":["math-modeling-manager"]},
+    {"name":"networkx","category":"method-specialist","stage":"G2.5-G3","activation":"批准的图、路径、流或匹配任务","outputs":[],"next_skills":["model-code-analyzer"]},
+    {"name":"paper-lookup","category":"data-evidence","stage":"G1-G2","activation":"有明确范围的论文/引文检索","outputs":[],"next_skills":["related-paper-analyzer"]},
+    {"name":"paper-polisher","category":"communication","stage":"G5","activation":"证据冻结后的语言和公式润色","outputs":["paper/sections/"],"next_skills":["latex-paper-zh","submission-auditor"]},
+    {"name":"paper-section-writer","category":"communication","stage":"G5","activation":"从写作包和冻结声明撰写分节","outputs":["paper/drafts/"],"next_skills":["paper-polisher","reference-manager"]},
+    {"name":"problem-framer","category":"framing-governance","stage":"G0","activation":"首次读取题目或范围变化","outputs":["planning/problem_contract.json"],"next_skills":["data-auditor-cleaner","method-selector"]},
+    {"name":"pymc","category":"method-specialist","stage":"G2.5-G4","activation":"批准的贝叶斯/层次模型","outputs":[],"next_skills":["robustness-checker"]},
+    {"name":"pymoo","category":"method-specialist","stage":"G2.5-G4","activation":"批准的多目标进化优化","outputs":[],"next_skills":["robustness-checker"]},
+    {"name":"python-code-reviewer","category":"implementation","stage":"G3","activation":"审查 Python 运行和证据","outputs":["code/Qx/reviews/"],"next_skills":["result-evaluator"]},
+    {"name":"python-model-code-generator","category":"implementation","stage":"G3","activation":"批准的 Python 方法需要实现","outputs":["results/Qx/experiments/run_summary.json"],"next_skills":["python-code-reviewer"]},
+    {"name":"quality-assurance-auditor","category":"audit","stage":"G6","activation":"最终 submission 抽样质量门","outputs":["paper/qa_report.json"],"next_skills":[]},
+    {"name":"reference-manager","category":"communication","stage":"G5","activation":"引用、BibTeX 和来源核验","outputs":["paper/refs.bib"],"next_skills":["latex-paper-zh","submission-auditor"]},
+    {"name":"related-paper-analyzer","category":"data-evidence","stage":"G1-G2","activation":"已有论文原文需要提取方法线索","outputs":["workspace/papers/related_paper_analysis.md"],"next_skills":["method-selector"]},
+    {"name":"result-evaluator","category":"evaluation","stage":"G3-G4","activation":"运行后诊断或综合结果证据","outputs":["results/Qx/reports/qx_run_assessment.json","results/Qx/reports/qx_result_evidence.json"],"next_skills":["robustness-checker","workflow-orchestrator"]},
+    {"name":"robustness-checker","category":"evaluation","stage":"G3-G4","activation":"按风险执行敏感性、稳定性或误差检查","outputs":["robustness/Qx/"],"next_skills":["result-evaluator","solution-package-builder"]},
+    {"name":"scientific-visualization","category":"communication","stage":"G3-G5","activation":"复杂科学图形的技术支持","outputs":[],"next_skills":["math-figure-generator"]},
+    {"name":"scikit-learn","category":"method-specialist","stage":"G2.5-G4","activation":"已批准的 sklearn 流水线或模型","outputs":[],"next_skills":["python-code-reviewer","robustness-checker"]},
+    {"name":"shap","category":"evaluation","stage":"G3-G5","activation":"已验证模型需要归因解释","outputs":[],"next_skills":["robustness-checker"]},
+    {"name":"simpy","category":"method-specialist","stage":"G2.5-G4","activation":"已批准的离散事件仿真","outputs":[],"next_skills":["robustness-checker"]},
+    {"name":"skforecast-recursive-direct","category":"method-specialist","stage":"G2.5-G4","activation":"已批准递归/直接单序列预测","outputs":[],"next_skills":["python-code-reviewer","robustness-checker"]},
+    {"name":"solution-package-builder","category":"communication","stage":"G4-G5","activation":"结果判断后生成写作包和冻结候选","outputs":["results/Qx/reports/frozen_numbers.json"],"next_skills":["figure-table-planner","paper-section-writer"]},
+    {"name":"statistical-analysis","category":"method-specialist","stage":"G2-G5","activation":"已采集数据需要检验和推断设计","outputs":[],"next_skills":["statsmodels","result-evaluator"]},
+    {"name":"statistical-power","category":"data-evidence","stage":"G1-G2","activation":"采集前需要样本量或功效规划","outputs":[],"next_skills":["experimental-design"]},
+    {"name":"statsmodels","category":"method-specialist","stage":"G2.5-G4","activation":"批准的经典统计或时序模型","outputs":[],"next_skills":["python-code-reviewer","robustness-checker"]},
+    {"name":"submission-auditor","category":"audit","stage":"G5-G6","activation":"交付产物需要一次完整性/一致性审计","outputs":["paper/audits/submission_audit.json"],"next_skills":["quality-assurance-auditor"]},
+    {"name":"symbol-table-builder","category":"framing-governance","stage":"G2.5-G5","activation":"需要全局符号与单位一致性","outputs":["planning/symbol_table.md"],"next_skills":["model-code-analyzer","paper-section-writer"]},
+    {"name":"sympy","category":"method-specialist","stage":"G2.5-G3","activation":"批准的精确符号推导","outputs":[],"next_skills":["model-code-analyzer"]},
+    {"name":"uncertainty-and-units","category":"data-evidence","stage":"G1-G5","activation":"单位、量纲或不确定性会影响结论","outputs":[],"next_skills":["model-code-analyzer","robustness-checker"]},
+    {"name":"workflow-orchestrator","category":"orchestration","stage":"G0-G6","activation":"运行状态机、检查证据和路由下一动作","outputs":["planning/workflow_run.json","planning/manifests/"],"next_skills":["problem-framer","data-auditor-cleaner","method-selector","git-experiment-manager","result-evaluator","submission-auditor"]}
   ]
 }

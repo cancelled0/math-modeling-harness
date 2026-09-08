@@ -1,6 +1,6 @@
 # Risk Probe Contract
 
-Use only checks relevant to the method, but always cover executability, representative data coverage, output degeneracy, small perturbations, and scale.
+Use only checks relevant to the shortlist. A probe is optional and should run only when a cheap check can distinguish a material feasibility risk; it need not implement every candidate.
 
 ## Canonical summary
 
@@ -15,7 +15,7 @@ Save `methods/Qx/probes/risk_probe_summary.json`:
   "methods": [
     {
       "id": "M1",
-      "role": "usable_baseline",
+      "role": "main",
       "executability": {
         "status": "PASS",
         "evidence": {"runtime_seconds": 0.2}

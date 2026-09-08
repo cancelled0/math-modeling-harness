@@ -32,7 +32,7 @@ The following should already exist or be provided:
 
 - Paper section drafts under `paper/sections/`.
 - Final method explanations (for formula and notation verification).
-- Final result analyses (for claim verification).
+- `results/Qx/reports/qx_result_evidence.json` (for claim verification).
 - The global symbol table at `planning/symbol_table.md` (if available).
 - Contest formatting requirements (if available).
 
@@ -44,7 +44,7 @@ Use or request:
 
 - `paper/sections/*.md` or `paper/sections/*.tex` — the drafted sections.
 - `methods/Qx/qx_final_method_explanation.md` — for formula and notation verification.
-- `results/Qx/reports/qx_final_result_analysis.md` — for claim verification.
+- `results/Qx/reports/qx_result_evidence.json` — for claim verification.
 - `planning/symbol_table.md` — for notation consistency.
 - Contest formatting requirements.
 
