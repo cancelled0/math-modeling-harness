@@ -11,6 +11,8 @@ description: 运行和检查数学建模工作区的文件型状态机，按子�
 
 科学验证读取 [可执行证据契约](references/scientific-evidence.md)。人工答案优先用 `record-decision` 保存原话、当前哈希与实验编号，用户未解释理由时允许为空。新实验重跑会回到 Git 上下文准备；保存 checkpoint 后建立后继分支，再实施诊断出的修复。
 
+继续既有任务或从中断恢复时，先运行 `context` 并读取对应 Qx 的活动上下文；其缓存规则与字段见 [活动上下文索引](references/active-context.md)。索引只帮助定位，不覆盖权威产物。
+
 读取项目 `AGENTS.md`。纯思路讨论由 `modeling-thought-partner` 旁路本 Skill；正式任务才进入状态机。
 
 ## 运行入口
@@ -21,6 +23,7 @@ description: 运行和检查数学建模工作区的文件型状态机，按子�
 init      初始化最小会话和每问 manifest
 status    派生当前状态，不伪造产物
 next      返回一个主要下一动作
+context   为一个或全部 Qx 生成可重建的 JSON/Markdown 活动上下文
 start     记录步骤开始与 Git 上下文
 finish    验证新产物/人工决定并完成迁移
 pause     暂停运行
@@ -30,6 +33,13 @@ check     检查模板、检查器和当前状态
 compare   调用 Git 实验的同口径比较
 export    导出证据与交付物，不包含原始数据
 smoke     在临时 Git 工作区运行模板驱动冒烟测试
+```
+
+常用形式：
+
+```text
+workflow.py --workspace <赛题目录> context --question Q1
+workflow.py --workspace <赛题目录> context --all --format json
 ```
 
 完整定义见 [状态机](references/state-machine.md)、[步骤契约](references/step-contract.md) 和 [检查点政策](references/checkpoint-policy.md)。模板位于 `assets/`，运行器和测试必须读取同一模板，不在代码中维护另一条固定流程。

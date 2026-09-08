@@ -35,3 +35,4 @@ description: 用 Git 为数学建模算法实验建立稳定快照、实验分�
 - 分支建立后交给 `model-code-analyzer` 或被诊断出的数据/特征/实现 Skill。
 - 实验完成后交给 `result-report-generator` 与 `compare_experiments.py`。
 - 接受、调整或拒绝由 `decision-prompt-builder` 和 `modeler-decision-logger` 记录。
+- 建立实验、完成运行、登记证据以及接受或拒绝分支后，脚本刷新 `planning/context/Qx_active_context.*`；刷新失败会在命令结果中明确报告，权威 Git 与实验记录仍以原文件为准。

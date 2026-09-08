@@ -19,7 +19,7 @@ description: 统一调度数学建模竞赛任务，在自由思路讨论、局�
 ## 正式启动检查
 
 1. 读取项目根目录 `AGENTS.md` 与 `planning/session_config.json`（若存在）。
-2. 通过 `workflow-orchestrator/scripts/workflow.py` 或其 Skill 契约检查当前 Qx、profile、阶段门、阻塞项、Git 状态和允许动作。
+2. 既有赛题先运行 `workflow-orchestrator/scripts/workflow.py context --question Qx`（多问恢复可用 `--all`），读取 `planning/context/Qx_active_context.md`；再通过状态机检查当前 Qx、profile、阶段门、阻塞项、Git 状态和允许动作。缓存与权威文件冲突时重建缓存并服从权威文件。
 3. 若尚无实际赛题，仅给出路由或初始化最小所需目录，不创建完整工作区。
 4. 若请求是明确单项任务，直接路由专业 Skill；完成后再由 `workflow-orchestrator` 刷新状态。
 

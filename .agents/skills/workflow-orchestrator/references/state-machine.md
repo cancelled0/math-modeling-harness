@@ -24,3 +24,5 @@
 ## 失效与重跑
 
 `rerun --from-step` 将该步及下游标记 stale；新实验可能先返回 git-experiment 准备上下文。重新完成时通过 start/finish 检查当前输入、输出、决定与依赖哈希，公共重跑和冻结政策见项目 AGENTS.md。
+
+任务中断或上下文压缩后，先重建 [活动上下文索引](active-context.md)，再从其中唯一的 `next_action` 恢复；索引显示的失效、拒绝或假设内容不得当作当前结论。

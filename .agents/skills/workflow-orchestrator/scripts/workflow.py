@@ -237,8 +237,8 @@ def action_for(root, run, nodes, valid, q=None):
         return next((a for a in candidates if a["owner"] == "agent"), candidates[0])
     return {"status": "COMPLETE"} if all(valid.values()) else {"status": "BLOCKED", "reason": "unfinished dependencies; use next without --question"}
 
-def derive_question(root, run, template, manifest):
-    nodes, _, valid, errors = state(root, run, template, manifest)
+def derive_question(root, run, template, manifest, computed=None):
+    nodes, _, valid, errors = computed or state(root, run, template, manifest)
     q, gate = manifest["question_id"], "G0"
     for key, step in nodes.items():
         if step["question_id"] in {q, "GLOBAL"} and valid[key]:
@@ -255,6 +255,437 @@ def derive_question(root, run, template, manifest):
         "freeze": valid.get(f"{q}:result-verdict", False), "paper_writing": valid.get(f"{q}:freeze", False),
         "final_assembly": all(valid.get(f"{x}:paper-section", False) for x in run["questions"])}
     return manifest
+
+
+def read_json_optional(path):
+    return read_json(path) if path.is_file() else None
+
+
+def read_jsonl(path):
+    if not path.is_file():
+        return []
+    rows = []
+    for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise WorkflowError(f"invalid JSONL record: {path}:{number}: {exc}") from exc
+        if not isinstance(row, dict):
+            raise WorkflowError(f"expected JSON object: {path}:{number}")
+        rows.append(row)
+    return rows
+
+
+def compact_value(value, depth=0):
+    """Bound cache size without interpreting or rewriting source evidence."""
+    if depth >= 4:
+        return "[truncated]"
+    if isinstance(value, str):
+        return value if len(value) <= 1200 else value[:1200] + "…"
+    if isinstance(value, list):
+        items = [compact_value(item, depth + 1) for item in value[:20]]
+        if len(value) > 20:
+            items.append({"omitted_items": len(value) - 20})
+        return items
+    if isinstance(value, dict):
+        keys = sorted(value)[:30]
+        result = {key: compact_value(value[key], depth + 1) for key in keys}
+        if len(value) > 30:
+            result["omitted_fields"] = len(value) - 30
+        return result
+    return value
+
+
+def project_fields(value, fields):
+    if not isinstance(value, dict):
+        return None
+    result = {key: compact_value(value[key]) for key in fields if key in value}
+    return result or None
+
+
+def direct_fingerprints(root, paths):
+    """Hash only named context sources; workflow snapshots already bind transitive files."""
+    result = {}
+    for raw in sorted(set(paths)):
+        path = c.inside(root, raw)
+        if path.is_file():
+            result[path.relative_to(root).as_posix()] = c.digest(path)
+    return result
+
+
+def context_source_paths(run, q):
+    iteration = run.get("iterations", {}).get(q, "round1")
+    lower = q.lower()
+    return [
+        "planning/workflow_run.json",
+        "planning/session_config.json",
+        "planning/events.jsonl",
+        "planning/experiment_registry.jsonl",
+        "planning/framing_decisions.jsonl",
+        "planning/parse/problem_parse.json",
+        "planning/classification/problem_classification.json",
+        "planning/manifests/GLOBAL.json",
+        f"planning/manifests/{q}.json",
+        f"planning/experiments/{q}/active_experiment.json",
+        "workspace/data/data_profile.json",
+        "workspace/data/source_registry.json",
+        f"workspace/evidence/{q}/evidence_brief.json",
+        f"workspace/features/{q}/{lower}_feature_spec.json",
+        f"workspace/features/{q}/{lower}_feature_audit.json",
+        f"methods/{q}/method_contract.json",
+        f"methods/{q}/{lower}_foundations.json",
+        f"methods/{q}/{lower}_decisions.jsonl",
+        f"results/{q}/experiments/{iteration}/run_summary.json",
+        f"results/{q}/experiments/{iteration}/presentation.json",
+        f"results/{q}/reports/{lower}_final_result_analysis.md",
+        f"results/{q}/reports/frozen_numbers.json",
+        f"robustness/{q}/{lower}_robustness_summary.json",
+    ]
+
+
+def source_as_of(root, paths):
+    timestamps = []
+
+    def collect(value, key=""):
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                collect(child, child_key)
+        elif isinstance(value, list):
+            for child in value:
+                collect(child, key)
+        elif isinstance(value, str) and (key.endswith("_at") or key in {"recorded_at", "decided_at"}):
+            timestamps.append(value)
+
+    for raw in paths:
+        path = c.inside(root, raw)
+        if not path.is_file():
+            continue
+        if path.suffix == ".jsonl":
+            for row in read_jsonl(path):
+                collect(row)
+        elif path.suffix == ".json":
+            collect(read_json(path))
+    return max(timestamps) if timestamps else None
+
+
+def find_subquestion(problem, q):
+    if not isinstance(problem, dict):
+        return None
+    rows = problem.get("subquestions", [])
+    if isinstance(rows, dict):
+        value = rows.get(q)
+        return value if isinstance(value, dict) else ({"id": q, "classification": value} if value is not None else None)
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and str(row.get("id", "")).upper() == q:
+            return row
+        if isinstance(row, str) and row.upper() == q:
+            return {"id": q}
+    return None
+
+
+def normalized_findings(value, source, kind, default_scope=None):
+    rows = value if isinstance(value, list) else ([value] if value not in (None, {}, []) else [])
+    result = []
+    for row in rows[:20]:
+        if isinstance(row, dict):
+            text_value = row.get("text", row.get("claim", row.get("statement", row)))
+            scope = row.get("scope", default_scope)
+            evidence = {key: row[key] for key in ("result_labels", "derivation_ids", "source_file", "source_locator") if key in row}
+        else:
+            text_value, scope, evidence = row, default_scope, {}
+        result.append({"kind": kind, "text": compact_value(text_value), "scope": compact_value(scope),
+                       "evidence": compact_value(evidence), "source": source})
+    return result
+
+
+def decision_context_summary(root, run, nodes, valid, q):
+    confirmed, stale = [], []
+    seen = set()
+    for key, step in nodes.items():
+        if step["question_id"] not in {q, "GLOBAL"} or not step.get("checkpoint"):
+            continue
+        checkpoint = step["checkpoint"]
+        identity = (step["question_id"], checkpoint["decision_type"])
+        if identity in seen:
+            continue
+        seen.add(identity)
+        owner = step["question_id"]
+        path_raw = render(checkpoint.get("decision_file", f"methods/{owner}/{owner.lower()}_decisions.jsonl"), owner)
+        row = latest_decision(root / path_raw, checkpoint["decision_type"])
+        if not row:
+            continue
+        deps_current = all(valid.get(dep, False) for dep in step["dependencies"])
+        evidence_current = row.get("evidence_hashes") == binding(root, step, nodes) and deps_current
+        item = project_fields(row, ("decision_id", "decision_type", "decided_by", "choice", "selected_method", "user_message",
+                                    "rationale", "experiment_id", "decided_at", "supersedes")) or {}
+        item.update(scope=owner, source=path_raw, evidence_current=evidence_current)
+        if evidence_current:
+            confirmed.append(item)
+        else:
+            stale.append({"kind": "human_decision", "reason": "evidence_or_dependencies_changed", **item})
+    return confirmed, stale
+
+
+def experiment_summary(root, run, q):
+    iteration = run.get("iterations", {}).get(q, "round1")
+    active_raw = f"planning/experiments/{q}/active_experiment.json"
+    summary_raw = f"results/{q}/experiments/{iteration}/run_summary.json"
+    active = read_json_optional(root / active_raw)
+    summary = read_json_optional(root / summary_raw)
+    registry = read_jsonl(runtime_paths(root)["experiments"])
+    relevant = []
+    for row in registry:
+        branch_name = str(row.get("branch", "")).lower()
+        if str(row.get("question_id", "")).upper() == q or row.get("experiment_id") == iteration or f"/{q.lower()}/" in branch_name:
+            relevant.append(row)
+    lifecycle = next((row for row in reversed(relevant) if row.get("experiment_id") == iteration or not row.get("experiment_id")), None)
+    return {
+        "experiment_id": iteration,
+        "lifecycle_status": lifecycle.get("event") if lifecycle else (active.get("status") if active else "not_started"),
+        "active_context_source": active_raw if active else None,
+        "active_context": project_fields(active, ("status", "algorithm", "branch", "base_branch", "parent_commit",
+                                                   "experiment_id", "question_id", "started_at")),
+        "run_summary_source": summary_raw if summary else None,
+        "run": project_fields(summary, ("status", "task_type", "primary_metric", "comparison_contract", "methods",
+                                           "random_seed", "execution", "environment", "runtime_seconds", "fallback_trigger")),
+        "latest_registry_event": compact_value(lifecycle) if lifecycle else None,
+    }, relevant
+
+
+def build_active_context(root, run, template, q, computed=None):
+    if q not in run["questions"]:
+        raise WorkflowError(f"question is not active: {q}")
+    nodes, manifests, valid, errors = computed or state(root, run, template)
+    question_state = derive_question(root, run, template, manifests[q], (nodes, manifests, valid, errors))
+    paths = context_source_paths(run, q)
+    problem = read_json_optional(root / "planning/parse/problem_parse.json")
+    subquestion = find_subquestion(problem, q)
+    classification = read_json_optional(root / "planning/classification/problem_classification.json")
+    question_classification = find_subquestion(classification, q)
+    data_profile = read_json_optional(root / "workspace/data/data_profile.json")
+    evidence_raw = f"workspace/evidence/{q}/evidence_brief.json"
+    academic_evidence = read_json_optional(root / evidence_raw)
+    feature_spec_raw = f"workspace/features/{q}/{q.lower()}_feature_spec.json"
+    feature_audit_raw = f"workspace/features/{q}/{q.lower()}_feature_audit.json"
+    feature_spec = read_json_optional(root / feature_spec_raw)
+    feature_audit = read_json_optional(root / feature_audit_raw)
+    method_raw = f"methods/{q}/method_contract.json"
+    method = read_json_optional(root / method_raw)
+    foundations_raw = f"methods/{q}/{q.lower()}_foundations.json"
+    foundations = read_json_optional(root / foundations_raw)
+    presentation_raw = f"results/{q}/experiments/{run['iterations'][q]}/presentation.json"
+    presentation = read_json_optional(root / presentation_raw)
+    robustness_raw = f"robustness/{q}/{q.lower()}_robustness_summary.json"
+    robustness = read_json_optional(root / robustness_raw)
+    freeze_raw = f"results/{q}/reports/frozen_numbers.json"
+    frozen = read_json_optional(root / freeze_raw)
+    confirmed, stale_decisions = decision_context_summary(root, run, nodes, valid, q)
+    experiment, registry_rows = experiment_summary(root, run, q)
+
+    if run["status"] == "paused":
+        next_action = {"status": "PAUSED", "reason": run.get("pause_reason")}
+    else:
+        next_action = question_state.get("next_action") or ({"status": "COMPLETE"} if question_state["status"] == "completed"
+                                                               else {"status": "BLOCKED", "reason": "no ready action"})
+    current_step = next_action.get("step")
+    if current_step:
+        owner = next_action.get("scope", q)
+        rec = manifests[owner].get("steps", {}).get(current_step, {})
+        current_step = {"id": current_step, "skill": next_action.get("skill"), "owner": next_action.get("owner"),
+                        "status": rec.get("status", "ready")}
+
+    accepted_result = valid.get(f"{q}:result-verdict", False)
+    robustness_current = valid.get(f"{q}:robustness", False)
+    freeze_current = valid.get(f"{q}:freeze", False)
+    supported = []
+    hypotheses = []
+    if presentation:
+        presentation_findings = normalized_findings(presentation.get("conclusions"), presentation_raw, "model_result",
+                                                   presentation.get("problem_goal"))
+        (supported if accepted_result else hypotheses).extend(presentation_findings)
+    if robustness and robustness_current:
+        supported.extend(normalized_findings(robustness.get("findings"), robustness_raw, "robustness",
+                                             "current experiment and tested perturbations"))
+    if frozen and freeze_current:
+        claims = frozen.get("claims", frozen.get("frozen_numbers", frozen.get("items", [])))
+        supported.extend(normalized_findings(claims, freeze_raw, "frozen_claim", "approved claim scope"))
+    if subquestion:
+        hypotheses.extend(normalized_findings(subquestion.get("proposed_relationships"),
+                                              "planning/parse/problem_parse.json", "proposed_relationship"))
+    if foundations:
+        hypotheses.extend(normalized_findings(foundations.get("assumptions"), foundations_raw, "model_assumption"))
+
+    stale_items = list(stale_decisions)
+    for key, step in nodes.items():
+        if step["question_id"] not in {q, "GLOBAL"}:
+            continue
+        rec = manifests[step["question_id"]].get("steps", {}).get(step["id"], {})
+        if rec.get("status") in {"stale", "rejected", "failed"} or (rec.get("status") == "completed" and not valid[key]):
+            stale_items.append({"kind": "workflow_step", "node": key, "status": rec.get("status"),
+                                "reason": errors.get(key, rec.get("error"))})
+    for row in registry_rows:
+        if row.get("event") == "experiment_rejected":
+            stale_items.append({"kind": "experiment", "status": "rejected", "reason": "human_result_verdict",
+                                "experiment_id": row.get("experiment_id"), "branch": row.get("branch"),
+                                "source": "planning/experiment_registry.jsonl"})
+
+    blockers = []
+    if next_action.get("status") == "PAUSED":
+        blockers.append({"kind": "paused", "reason": next_action.get("reason")})
+    elif next_action.get("status") == "BLOCKED":
+        blockers.append({"kind": "dependency", "reason": next_action.get("reason")})
+    elif next_action.get("owner") == "human":
+        blockers.append({"kind": "human_checkpoint", "reason": next_action.get("checkpoint", {}).get("reason")})
+
+    methods = project_fields(method, ("main", "usable_baseline", "conditional_fallback", "fallback", "rationale",
+                                             "task_type", "required_checks"))
+    selected_method = next((row.get("selected_method") for row in reversed(confirmed)
+                            if row.get("decision_type") == "method_choice" and row.get("selected_method")), None)
+    payload = {
+        "context_schema_version": 1,
+        "canonicality": {"role": "derived_cache", "authoritative_sources_override": True,
+                         "regenerate_with": f"workflow.py --workspace <workspace> context --question {q}"},
+        "workflow": {
+            "workflow_id": run.get("workflow_id"), "profile": run["profile"], "contest_profile": run["config"].get("contest_profile"),
+            "implementation_language": run["config"].get("implementation_language"), "paper_format": run["config"].get("paper_format"),
+            "delivery_mode": run["config"].get("delivery_mode"), "question_id": q, "gate": question_state.get("current_gate"),
+            "status": question_state.get("status"), "run_status": run.get("status"), "current_step": current_step,
+        },
+        "problem": {
+            "source": "planning/parse/problem_parse.json" if problem else None,
+            "global_goal": compact_value(problem.get("global_goal")) if problem else None,
+            "question": project_fields(subquestion, ("id", "statement", "goal", "required_outputs", "success_criteria", "constraints", "dependencies")),
+            "classification": project_fields(question_classification, ("id", "primary_type", "secondary_type", "confidence", "required_validation", "risks")),
+        },
+        "confirmed_decisions": confirmed,
+        "methods": {"source": method_raw if method else None, "selected_method": selected_method, "contract": methods},
+        "data": {"source": "workspace/data/data_profile.json" if data_profile else None,
+                 "profile": project_fields(data_profile, ("status", "data_mode", "input_files", "quality_findings", "no_data_reason", "warnings", "limitations"))},
+        "academic_evidence": {"source": evidence_raw if academic_evidence else None,
+                              "brief": project_fields(academic_evidence, ("status", "findings", "gaps", "stop_reason", "limitations")),
+                              "search_count": len(academic_evidence.get("search_log", [])) if academic_evidence else 0},
+        "features": {
+            "spec_source": feature_spec_raw if feature_spec else None,
+            "spec": project_fields(feature_spec, ("question_id", "target", "split_contract", "fit_scope", "features", "transform_pipeline", "units", "output_columns")),
+            "audit_source": feature_audit_raw if feature_audit else None,
+            "audit": project_fields(feature_audit, ("status", "decisions", "leakage_checks", "ablation_results", "stability", "limitations", "review_status")),
+        },
+        "active_experiment": experiment,
+        "supported_findings": supported,
+        "hypotheses": hypotheses,
+        "stale_or_rejected": stale_items,
+        "blockers": blockers,
+        "next_action": compact_value(next_action),
+        "source_sha256": direct_fingerprints(root, paths),
+    }
+    payload["generated"] = {"renderer": "workflow-orchestrator/context-v1", "as_of": source_as_of(root, paths),
+                            "state_sha256": hash_value(payload)}
+    return payload
+
+
+def markdown_scalar(value, limit=1200):
+    if value in (None, "", [], {}):
+        return "尚无"
+    if isinstance(value, str):
+        encoded = value
+    else:
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return encoded if len(encoded) <= limit else encoded[:limit] + "…（完整字段见 JSON 索引）"
+
+
+def render_active_context(data):
+    workflow = data["workflow"]
+    problem = data["problem"]
+    lines = [f"# {workflow['question_id']} 活动上下文", "",
+             "> 这是可重建索引；与权威文件冲突时，以权威文件为准。", "",
+             "## 当前状态", "",
+             f"- 流程：`{workflow.get('profile')}`；阶段门：`{workflow.get('gate')}`；状态：`{workflow.get('status')}`",
+             f"- 当前步骤：{markdown_scalar(workflow.get('current_step'))}",
+             f"- 状态哈希：`{data['generated']['state_sha256']}`", "",
+             "## 题目契约", "",
+             f"- 总目标：{markdown_scalar(problem.get('global_goal'))}",
+             f"- 本问：{markdown_scalar(problem.get('question'))}", "",
+             "## 学术证据", "", markdown_scalar(data["academic_evidence"]), "",
+             "## 已确认的人工决定", ""]
+    if data["confirmed_decisions"]:
+        for row in data["confirmed_decisions"]:
+            lines.append(f"- `{row.get('decision_type')}` / `{row.get('decision_id')}`：{row.get('user_message')}（选择：{row.get('selected_method') or row.get('choice')}）")
+    else:
+        lines.append("- 尚无与当前证据绑定的人工决定。")
+    lines.extend(["", "## 方法、数据与特征", "",
+                  f"- 方法：{markdown_scalar(data['methods'])}",
+                  f"- 数据：{markdown_scalar(data['data'])}",
+                  f"- 特征：{markdown_scalar(data['features'])}", "",
+                  "## 当前实验", "", markdown_scalar(data["active_experiment"]), "",
+                  "## 已支持的结论", ""])
+    findings = data["supported_findings"]
+    lines.extend([f"- {markdown_scalar(row, 700)}" for row in findings[:8]] or ["- 尚无已接受或已验证的结论。"])
+    if len(findings) > 8:
+        lines.append(f"- 其余 {len(findings) - 8} 项见 JSON 索引。")
+    lines.extend(["", "## 待验证假设", ""])
+    hypotheses = data["hypotheses"]
+    lines.extend([f"- {markdown_scalar(row, 700)}" for row in hypotheses[:8]] or ["- 尚无。"])
+    if len(hypotheses) > 8:
+        lines.append(f"- 其余 {len(hypotheses) - 8} 项见 JSON 索引。")
+    lines.extend(["", "## 失效或已拒绝内容", ""])
+    stale = data["stale_or_rejected"]
+    lines.extend([f"- {markdown_scalar(row, 700)}" for row in stale[:12]] or ["- 尚无。"])
+    if len(stale) > 12:
+        lines.append(f"- 其余 {len(stale) - 12} 项见 JSON 索引。")
+    lines.extend(["", "## 阻塞项与唯一下一动作", "",
+                  f"- 阻塞项：{markdown_scalar(data['blockers'])}",
+                  f"- 下一动作：{markdown_scalar(data['next_action'])}", "",
+                  "## 权威来源哈希", "", "| 文件 | SHA256 |", "|---|---|"])
+    lines.extend(f"| `{path}` | `{digest}` |" for path, digest in data["source_sha256"].items())
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_active_context(root, run, template, q, output_format="both", computed=None):
+    data = build_active_context(root, run, template, q, computed)
+    folder = root / "planning/context"
+    json_path = folder / f"{q}_active_context.json"
+    md_path = folder / f"{q}_active_context.md"
+    written = []
+    if output_format in {"json", "both"}:
+        encoded = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+        if not json_path.is_file() or json_path.read_text(encoding="utf-8") != encoded:
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+            temp = json_path.with_suffix(json_path.suffix + ".tmp")
+            temp.write_text(encoded, encoding="utf-8")
+            os.replace(temp, json_path)
+        written.append(json_path.relative_to(root).as_posix())
+    if output_format in {"md", "both"}:
+        rendered = render_active_context(data)
+        if not md_path.is_file() or md_path.read_text(encoding="utf-8") != rendered:
+            md_path.parent.mkdir(parents=True, exist_ok=True)
+            temp = md_path.with_suffix(md_path.suffix + ".tmp")
+            temp.write_text(rendered, encoding="utf-8")
+            os.replace(temp, md_path)
+        written.append(md_path.relative_to(root).as_posix())
+    return {"question_id": q, "state_sha256": data["generated"]["state_sha256"], "artifacts": written}
+
+
+def refresh_active_contexts(root, run, template, questions=None, output_format="both", computed=None):
+    refreshed, errors = [], []
+    computed = computed or state(root, run, template)
+    for q in questions or run["questions"]:
+        try:
+            refreshed.append(write_active_context(root, run, template, q, output_format, computed))
+        except (OSError, ValueError, KeyError, WorkflowError) as exc:
+            errors.append({"question_id": q, "error": str(exc)})
+    return {"status": "PASSED" if not errors else "FAILED", "contexts": refreshed, "errors": errors}
+
+
+def cmd_context(root, args):
+    run, template = load_runtime(root)
+    questions = run["questions"] if getattr(args, "all", False) else [normalize_question(args.question)]
+    result = refresh_active_contexts(root, run, template, questions, args.format)
+    if result["errors"]:
+        raise WorkflowError("; ".join(f"{row['question_id']}: {row['error']}" for row in result["errors"]))
+    result["status"] = "GENERATED"
+    return result
 
 def step_complete(root, manifest, step):
     if not runtime_paths(root)["run"].is_file():
@@ -318,16 +749,23 @@ def cmd_init(root, args):
 
 def cmd_next(root, args):
     run, template = load_runtime(root)
+    raw_question = getattr(args, "question", None)
+    question = normalize_question(raw_question) if raw_question else None
+    refresh_questions = [question] if question else run["questions"]
     if run["status"] == "paused":
-        return {"status": "PAUSED", "reason": run.get("pause_reason")}
-    nodes, _, valid, _ = state(root, run, template)
-    result = action_for(root, run, nodes, valid, getattr(args, "question", None))
+        result = {"status": "PAUSED", "reason": run.get("pause_reason")}
+        result["context_refresh"] = refresh_active_contexts(root, run, template, refresh_questions)
+        return result
+    computed = state(root, run, template)
+    nodes, _, valid, _ = computed
+    result = action_for(root, run, nodes, valid, question)
     deadline = run["config"].get("deadline_at")
     if deadline:
         remaining = (datetime.fromisoformat(deadline.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds() / 60
         result["remaining_minutes"] = round(remaining, 1)
         if remaining <= run["config"]["paper_reserve_minutes"]:
             result["time_guidance"] = "protect paper time; finish minimum viable answers; defer optional experiments; never auto-approve"
+    result["context_refresh"] = refresh_active_contexts(root, run, template, refresh_questions, computed=computed)
     return result
 
 def cmd_status(root, args):
@@ -356,7 +794,9 @@ def cmd_start(root, args):
     step_record(manifest, step["id"]).update(status="running", started_at=now(), input_snapshot=binding(root, step, nodes), error=None)
     save_manifest(root, manifest)
     record_event(root, "started", question_id=step["question_id"], step=step["id"])
-    return {"status": "RUNNING", "step": step["id"], "evidence_hashes": binding(root, step, nodes)}
+    questions = run["questions"] if step["question_id"] == "GLOBAL" else [step["question_id"]]
+    return {"status": "RUNNING", "step": step["id"], "evidence_hashes": binding(root, step, nodes),
+            "context_refresh": refresh_active_contexts(root, run, template, questions)}
 
 def validate_step(root, manifest, step):
     run, template = load_runtime(root)
@@ -418,7 +858,9 @@ def cmd_finish(root, args):
     nxt = cmd_next(root, argparse.Namespace(question=None))
     run["status"] = "completed" if nxt["status"] == "COMPLETE" else "running"
     write_json(runtime_paths(root)["run"], run)
-    return {"status": "COMPLETED", "step": step["id"], "next": nxt}
+    questions = run["questions"] if step["question_id"] == "GLOBAL" else [step["question_id"]]
+    return {"status": "COMPLETED", "step": step["id"], "next": nxt,
+            "context_refresh": refresh_active_contexts(root, run, template, questions)}
 
 def cmd_rerun(root, args):
     run, template = load_runtime(root)
@@ -456,16 +898,19 @@ def cmd_rerun(root, args):
     return {"status": "STALE", "affected": sorted(affected), "next": cmd_next(root, argparse.Namespace(question=q))}
 
 def cmd_pause(root, args):
-    run, _ = load_runtime(root)
+    run, template = load_runtime(root)
     run.update(status="paused", pause_reason=args.reason)
     write_json(runtime_paths(root)["run"], run)
-    return {"status": "PAUSED"}
+    record_event(root, "paused", reason=args.reason)
+    return {"status": "PAUSED", "reason": args.reason,
+            "context_refresh": refresh_active_contexts(root, run, template)}
 
 def cmd_resume(root, args):
-    run, _ = load_runtime(root)
+    run, template = load_runtime(root)
     run.update(status="running", pause_reason=None)
     write_json(runtime_paths(root)["run"], run)
-    return {"status": "RUNNING"}
+    record_event(root, "resumed")
+    return {"status": "RUNNING", "context_refresh": refresh_active_contexts(root, run, template)}
 
 def cmd_check(root, args):
     run, template = load_runtime(root)
@@ -552,7 +997,7 @@ def cmd_record_decision(root, args):
     path = root / render(checkpoint.get("decision_file", f"methods/{q}/{q.lower()}_decisions.jsonl"), q)
     previous = decision_for(root, step)
     row = {"schema_version": 1, "decision_id": f"{q}-{step['id']}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}",
-           "decision_type": checkpoint["decision_type"], "status": "DECIDED", "decided_by": "human",
+           "decision_type": checkpoint["decision_type"], "question_id": q, "status": "DECIDED", "decided_by": "human",
            "choice": args.choice, "user_message": args.user_message, "rationale": args.rationale,
            "selected_method": args.selected_method, "experiment_id": run["iterations"].get(q),
            "evidence_hashes": binding(root, step, graph(root, run, template)), "decided_at": now(),
@@ -560,7 +1005,10 @@ def cmd_record_decision(root, args):
     if args.rerun_from:
         row["rerun_from"] = args.rerun_from
     append_jsonl(path, row)
-    return {"status": "RECORDED", "decision": row, "path": str(path)}
+    record_event(root, "decision_recorded", question_id=q, step=step["id"], decision_id=row["decision_id"])
+    questions = run["questions"] if q == "GLOBAL" else [q]
+    return {"status": "RECORDED", "decision": row, "path": str(path),
+            "context_refresh": refresh_active_contexts(root, run, template, questions)}
 
 def smoke_test():
     from smoke_case import run_smoke
@@ -611,6 +1059,11 @@ def build_parser():
     init.add_argument("--allow-no-git", action="store_true")
     for name in ("status", "next"):
         sub.add_parser(name).add_argument("--question")
+    context = sub.add_parser("context")
+    target = context.add_mutually_exclusive_group(required=True)
+    target.add_argument("--question")
+    target.add_argument("--all", action="store_true")
+    context.add_argument("--format", choices=("json", "md", "both"), default="both")
     for name in ("start", "finish", "decision-context"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--question", required=True)
@@ -642,7 +1095,7 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
     handlers = {name: globals()["cmd_" + name.replace("-", "_")] for name in (
-        "init", "status", "next", "start", "finish", "pause", "resume", "rerun", "check", "compare", "export", "reconfigure", "decision-context", "record-decision")}
+        "init", "status", "next", "context", "start", "finish", "pause", "resume", "rerun", "check", "compare", "export", "reconfigure", "decision-context", "record-decision")}
     handlers.update(migrate=cmd_reconfigure, smoke=lambda root, args: smoke_test())
     try:
         result = handlers[args.command](args.workspace.resolve(), args)

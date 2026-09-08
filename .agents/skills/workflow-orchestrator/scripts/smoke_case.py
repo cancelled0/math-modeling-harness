@@ -218,6 +218,11 @@ def run_smoke():
         assert sequence.index("Q1:results-presentation") < sequence.index("Q1:result-verdict")
         assert pending["step"] == "markdown-build"
         values = {q: w.read_json(root / f"results/{q}/experiments/round1/run_summary.json")["primary_metric"]["value"] for q in ("Q1", "Q2")}
+        contexts = {q: w.read_json(root / f"planning/context/{q}_active_context.json") for q in ("Q1", "Q2")}
+        assert all(any(row.get("kind") == "model_result" for row in context["supported_findings"])
+                   for context in contexts.values())
+        assert all(all(row.get("decided_by") == "human" for row in context["confirmed_decisions"])
+                   for context in contexts.values())
         changed = root / "workspace/data/clean.csv"
         changed.write_text(changed.read_text() + "20,41\n")
         state = w.cmd_status(root, argparse.Namespace(question=None))

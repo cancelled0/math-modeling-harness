@@ -34,9 +34,15 @@ deadline_at 是带时区 ISO 时间。research_budget_minutes 默认 30，paper_
 
 input_files、output_files、evidence_files、source_file、local_path 等显式路径递归登记内容哈希。输出、输入或依赖变化撤销下游允许动作，修改时间不能绕过。
 
+## 活动上下文
+
+`context --question Qx` 或 `context --all` 生成 `planning/context/Qx_active_context.json` 与 `.md`。它们是可删除、可重建的恢复索引；字段、刷新时机和真实性规则见 [活动上下文索引](active-context.md)。
+
+状态更新命令自动刷新；`status` 与 `next` 也会根据当前权威文件重建。刷新失败会在命令结果的 `context_refresh` 中报告，但不会把旧缓存提升为有效证据。恢复工作前必须重新生成，随后仍按 `next_action` 打开真实输入。
+
 ## 决定和迭代
 
-当前证据准备好后用 `decision-context --question Qx --step ...` 获取 evidence_hashes。用户实际答复的 JSONL 包含 decision_id、decision_type、decided_by=human、status=DECIDED、user_message（真实答复或会话消息引用）、decided_at、choice、evidence_hashes；结果决定另含 experiment_id。
+当前证据准备好后用 `decision-context --question Qx --step ...` 获取 evidence_hashes。用户实际答复的 JSONL 包含 decision_id、decision_type、question_id、decided_by=human、status=DECIDED、user_message（真实答复或会话消息引用）、decided_at、choice、evidence_hashes；结果决定另含 experiment_id。
 
 - framing_choice、method_choice、package_signoff 使用 choice=accept；selected_method 记录具体方法并与契约一致。
 - result_verdict 使用 accept/adjust/reject/fallback；调整记录 diagnosis（data/feature/method/parameter/implementation/metric）和 rerun_from，用户未说明理由时 rationale 为 null。更换方法回到方法筛选和确认。

@@ -22,6 +22,7 @@ PROTECTED_PATTERNS = (
     re.compile(r"(^|/)(\.env($|\.)|.*credentials.*\.json$|.*secrets.*\.json$)", re.I),
     re.compile(r"\.(pem|key)$", re.I),
 )
+WORKFLOW_CONTEXT_SCRIPT = Path(__file__).resolve().parents[2] / "workflow-orchestrator/scripts/workflow.py"
 
 
 def now() -> str:
@@ -87,6 +88,31 @@ def append_registry(root: Path, record: dict[str, Any]) -> Path:
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     return path
+
+
+def refresh_modeling_context(root: Path, question_id: str | None) -> dict[str, Any]:
+    """Refresh the disposable workflow cache and surface failures without hiding the Git result."""
+    if not question_id or not (root / "planning/workflow_run.json").is_file() or not WORKFLOW_CONTEXT_SCRIPT.is_file():
+        return {"status": "SKIPPED", "reason": "no active workflow context"}
+    proc = subprocess.run(
+        [sys.executable, str(WORKFLOW_CONTEXT_SCRIPT), "--workspace", str(root), "context",
+         "--question", question_id.upper(), "--format", "both"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        result = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        result = {"status": "FAILED", "error": (proc.stdout or proc.stderr).strip()}
+    if proc.returncode and result.get("status") != "FAILED":
+        result = {"status": "FAILED", "error": result}
+    return result
+
+
+def context_artifacts(root: Path, refresh: dict[str, Any]) -> list[str]:
+    if refresh.get("status") not in {"GENERATED", "PASSED"}:
+        return []
+    paths = [raw for row in refresh.get("contexts", []) for raw in row.get("artifacts", [])]
+    return [relative_path(root, raw) for raw in paths if (root / raw).is_file()]
 
 
 def commit_paths(root: Path, paths: list[str], message: str) -> str:
@@ -173,7 +199,9 @@ def cmd_start(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     context_path = root / "planning" / "experiments" / args.question.upper() / "active_experiment.json"
     context_path.parent.mkdir(parents=True, exist_ok=True)
     context_path.write_text(json.dumps(context, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"status": "STARTED", **context, "context": context_path.relative_to(root).as_posix()}
+    refresh = refresh_modeling_context(root, args.question)
+    return {"status": "STARTED", **context, "context": context_path.relative_to(root).as_posix(),
+            "context_refresh": refresh}
 
 
 def validate_active_context(root, args):
@@ -231,6 +259,8 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     evidence_paths.extend(relative_path(root, p) for p in (args.paths or []))
     if context_path.exists():
         evidence_paths.append(context_path.relative_to(root).as_posix())
+    refresh = refresh_modeling_context(root, question_id)
+    evidence_paths.extend(context_artifacts(root, refresh))
     evidence_commit = commit_paths(
         root,
         evidence_paths,
@@ -242,6 +272,7 @@ def cmd_record(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         "code_commit": code_commit,
         "evidence_commit": evidence_commit,
         "branch": branch(root),
+        "context_refresh": refresh,
     }
 
 
@@ -251,7 +282,10 @@ def cmd_run(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     if receipt.exists():
         raise ValueError("attempt already recorded; preserve it and use a fresh experiment ID/directory")
     try:
-        return execute_run(root, args)
+        result = execute_run(root, args)
+        summary = json.loads((root / relative_path(root, args.summary)).read_text(encoding="utf-8"))
+        result["context_refresh"] = refresh_modeling_context(root, summary.get("question_id") or summary.get("question"))
+        return result
     except (Exception, KeyboardInterrupt) as exc:
         if receipt.exists():
             data = json.loads(receipt.read_text(encoding="utf-8"))
@@ -366,13 +400,14 @@ def verify_decision(root, args, choice):
         commit = summary.get("execution", {}).get("code_commit")
         if not commit or run_git(root, "merge-base", "--is-ancestor", commit, args.branch, check=False).returncode:
             raise ValueError("experiment code is not on the target branch")
-    return path
+    return path, row
 
 
 def checkpoint_generated_state(root, decision_file):
     """Persist only named harness control records before a branch transition."""
     names = ["planning/workflow_run.json", "planning/artifacts.json", "planning/events.jsonl", "planning/experiment_registry.jsonl"]
     names.extend(p.relative_to(root).as_posix() for p in (root / "planning/manifests").glob("*.json"))
+    names.extend(p.relative_to(root).as_posix() for p in (root / "planning/context").glob("*_active_context.*"))
     names.append(decision_file.relative_to(root).as_posix())
     changed = []
     for raw in names:
@@ -385,7 +420,8 @@ def checkpoint_generated_state(root, decision_file):
 def cmd_accept(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
     require_experiment_branch(args.branch, args.base)
-    decision_file = verify_decision(root, args, "accept")
+    decision_file, decision = verify_decision(root, args, "accept")
+    question_id = str(decision.get("question_id") or decision_file.parent.name).upper()
     checkpoint_generated_state(root, decision_file)
     require_clean(root)
     run_git(root, "show-ref", "--verify", f"refs/heads/{args.branch}")
@@ -394,47 +430,62 @@ def cmd_accept(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     registry = append_registry(root, {
         "schema_version": 1,
         "event": "experiment_accepted",
+        "question_id": question_id,
+        "experiment_id": decision.get("experiment_id"),
         "branch": args.branch,
         "decision_id": args.decision_id,
         "merge_commit": head(root),
         "recorded_at": now(),
     })
-    record_commit = commit_paths(root, [registry.relative_to(root).as_posix()], f"accept: record {args.decision_id}")
-    return {"status": "ACCEPTED", "branch": args.branch, "base": args.base, "commit": record_commit}
+    refresh = refresh_modeling_context(root, question_id)
+    paths = [registry.relative_to(root).as_posix(), *context_artifacts(root, refresh)]
+    record_commit = commit_paths(root, paths, f"accept: record {args.decision_id}")
+    return {"status": "ACCEPTED", "branch": args.branch, "base": args.base, "commit": record_commit,
+            "context_refresh": refresh}
 
 
 def cmd_reject(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     ensure_repo(root)
     require_experiment_branch(args.branch, args.base)
-    decision_file = verify_decision(root, args, "reject")
+    decision_file, decision = verify_decision(root, args, "reject")
+    question_id = str(decision.get("question_id") or decision_file.parent.name).upper()
     checkpoint_generated_state(root, decision_file)
     require_clean(root)
     run_git(root, "switch", args.branch)
     registry = append_registry(root, {
         "schema_version": 1,
         "event": "experiment_rejected",
+        "question_id": question_id,
+        "experiment_id": decision.get("experiment_id"),
         "branch": args.branch,
         "decision_id": args.decision_id,
         "commit": head(root),
         "recorded_at": now(),
     })
-    record_commit = commit_paths(root, [registry.relative_to(root).as_posix()], f"exp: record rejection {args.decision_id}")
+    experiment_refresh = refresh_modeling_context(root, question_id)
+    record_commit = commit_paths(root, [registry.relative_to(root).as_posix(), *context_artifacts(root, experiment_refresh)],
+                                 f"exp: record rejection {args.decision_id}")
     run_git(root, "switch", args.base)
     stable_registry = append_registry(root, {
         "schema_version": 1,
         "event": "experiment_rejected",
+        "question_id": question_id,
+        "experiment_id": decision.get("experiment_id"),
         "branch": args.branch,
         "decision_id": args.decision_id,
         "preserved_commit": record_commit,
         "recorded_at": now(),
     })
-    stable_commit = commit_paths(root, [stable_registry.relative_to(root).as_posix()], f"revert: retain rejection {args.decision_id}")
+    stable_refresh = refresh_modeling_context(root, question_id)
+    stable_commit = commit_paths(root, [stable_registry.relative_to(root).as_posix(), *context_artifacts(root, stable_refresh)],
+                                 f"revert: retain rejection {args.decision_id}")
     return {
         "status": "REJECTED",
         "branch": args.branch,
         "preserved_commit": record_commit,
         "returned_to": args.base,
         "stable_record_commit": stable_commit,
+        "context_refresh": stable_refresh,
     }
 
 
