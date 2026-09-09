@@ -1,23 +1,18 @@
 # 正式路由
 
-公共模式、证据、人工判断、Git 和交付政策统一见项目 `AGENTS.md`；完整步骤以 `workflow-orchestrator/assets/pipeline.template.json` 为准，profile 文件只保存差异，产物字段以 `artifact-contracts.json` 为准。
+公共模式、证据、人工判断、Git 和结果交接政策统一见项目 `AGENTS.md`；完整步骤以 `workflow-orchestrator/assets/pipeline.template.json` 为准，profile 文件只保存差异，产物字段以 `artifact-contracts.json` 为准。
 
 ## 主链
 
-`problem-framer → data/evidence（按需）→ method-selector → 一次方法决定 → git-experiment → foundations →（复杂任务才 implementation-spec）→ generator → language reviewer → run assessment →（按配置 robustness）→ result synthesis →（submission/配置要求时）一次结果决定`
-
-submission 在结果决定后继续：
-
-`final-method-explainer → solution-package-builder/claim_freeze → figure plan/generator → paper writing/polish/references → LaTeX/Word/Markdown delivery → submission-auditor → quality-assurance-auditor`
+`problem-framer → data/evidence（按需）→ method-selector → 一次方法决定 → git-experiment → foundations →（复杂任务才 implementation-spec）→ generator → language reviewer → run assessment →（按配置 robustness）→ result synthesis →（submission/配置要求时）一次结果决定 → modeling-results-presenter`
 
 ## 路径边界
 
 - `problem-framer` 同时记录每问目标、输出、任务类型、数据需要、依赖和实质歧义；不再拆成两个互相漂移的解析/分类文件。
 - `data-auditor-cleaner` 接受 `attached`、`external` 和 `none`，原始数据只读；`feature-engineering` 只处理衍生特征和变量约简。
 - `method-selector` 给一个主方法和可选 reference policy；没有合适参考时写 `none_with_reason`。只有比较声明才要求可比参考。
-- 结果评价分为 `run_assessment`（是否需要修复）和 `result_evidence`（供判断/写作）；普通成功轮次不生成重复 Markdown 报告。
-- `modeling-results-presenter` 是按需的派生视图，不是默认阶段。
-- submission audit 合并完整性与一致性；QA 只做最终抽样和质量门。图、外部数据或 reference 的缺失可以带理由省略。
+- 结果评价分为 `run_assessment`（是否需要修复）和 `result_evidence`（供判断与展示）；普通成功轮次不生成重复 Markdown 报告。
+- `modeling-results-presenter` 是两种 profile 的终止步骤，从当前证据派生正式求解过程与结果展示，不改写权威结果。
 
 ## 失效恢复
 

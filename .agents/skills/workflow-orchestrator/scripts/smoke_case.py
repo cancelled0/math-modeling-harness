@@ -1,7 +1,6 @@
 """Real deterministic numerical integration fixture. Human choices are TEST fixtures.
 
-Exercises the installed workflow through section writing; publication/visual approval
-is intentionally left pending unless a separate real rendering review is performed.
+Exercises the installed workflow through the formal solution-results presentation.
 """
 from __future__ import annotations
 import argparse
@@ -15,6 +14,7 @@ from pathlib import Path
 import workflow as w
 
 GIT_SCRIPT = w.SKILL_DIR.parent / "git-experiment-manager/scripts/experiment_git.py"
+PRESENTER_SCRIPT = w.SKILL_DIR.parent / "modeling-results-presenter/scripts/present_results.py"
 
 MODEL = r'''
 import csv, json, math, hashlib, sys
@@ -81,7 +81,7 @@ def initialize(root, profile="lean", questions="Q1,Q2"):
     subprocess.run(["git", "add", "code/model.py", "workspace/data/clean.csv"], cwd=root, check=True)
     subprocess.run(["git", "commit", "-m", "test: deterministic numerical model"], cwd=root, capture_output=True, check=True)
     json_file(root, "planning/session_config.json", {"question_dependencies": {"Q2": ["Q1"]} if "Q2" in questions else {}})
-    w.cmd_init(root, argparse.Namespace(profile=profile, questions=questions, paper_format="markdown" if profile == "submission" else "none", language="python", allow_no_git=False))
+    w.cmd_init(root, argparse.Namespace(profile=profile, questions=questions, language="python", allow_no_git=False))
 
 
 def make_presentation(root, q, iteration):
@@ -181,32 +181,11 @@ def produce(root, action, choice="accept"):
                                 "reference_evaluation": {"role": "empirical_baseline", "source_file": result_file},
                                 "robustness": {"source_file": f"robustness/{q}/{q.lower()}_robustness_summary.json"},
                                 "limitations": ["synthetic fixture"], "evidence_files": [summary, result_file]})
-    elif sid == "method-explanation":
-        text_file(root, out[0], "OLS is fit on the training block and evaluated on the held-out block; see canonical result evidence.\n")
-    elif sid == "freeze":
-        value = w.read_json(root / summary)["primary_metric"]["value"]
-        text_file(root, out[0], "Accepted synthetic OLS evidence; no claims beyond this generated dataset.\n")
-        json_file(root, out[1], {"schema_version": 1, "status": "proposed", "question_id": q,
-                                "claim_scope": "synthetic fixture only", "evidence_files": [summary],
-                                "claims": [{"claim_id": "rmse", "value": value, "source_file": summary, "source_locator": "$.primary_metric.value"}]})
-    elif sid == "figure-plan":
-        json_file(root, out[0], {"schema_version": 1, "status": "passed", "question_id": q, "items": [],
-                                "omission_reason": "small numerical fixture has no figure requirement"})
-    elif sid == "figures":
-        json_file(root, out[0], {"schema_version": 1, "status": "passed", "question_id": q, "figures": [], "omission_reason": "small numerical fixture has no figure requirement"})
-    elif sid == "paper-section":
-        text_file(root, out[0], (root / f"methods/{q}/{q.lower()}_final_method_explanation.md").read_text(encoding="utf-8"))
-    elif sid == "paper-polish":
-        source = root / f"paper/drafts/{q.lower()}.md"
-        if not source.exists():
-            source = root / f"paper/sections/{q.lower()}.md"
-        text_file(root, out[0], source.read_text(encoding="utf-8"))
-    elif sid == "references":
-        text_file(root, out[0], "% Synthetic numerical fixture; no external references claimed.\n")
-        text_file(root, out[1], "No external citations in synthetic fixture.\n")
-        json_file(root, out[2], {"status": "passed", "evidence_files": [f"paper/sections/{x.lower()}.md" for x in run["questions"]], "unresolved": []})
+    elif sid == "solution-presentation":
+        json_file(root, out[0], make_presentation(root, q, iteration))
+        cli(root, PRESENTER_SCRIPT, "--workspace", str(root), "--spec", out[0])
     elif not step.get("checkpoint"):
-        raise ValueError(f"fixture producer intentionally stops before real publication: {sid}")
+        raise ValueError(f"fixture has no producer for workflow step: {sid}")
     if step.get("checkpoint"):
         dtype = step["checkpoint"]["decision_type"]
         relative = w.render(step["checkpoint"].get("decision_file", f"methods/{q}/{q.lower()}_decisions.jsonl"), q)
@@ -240,10 +219,11 @@ def run_smoke():
     with tempfile.TemporaryDirectory(prefix="modeling-numerical-smoke-") as temp:
         root = Path(temp)
         initialize(root, "submission")
-        sequence, pauses, pending = advance(root, "markdown-build")
+        sequence, pauses, pending = advance(root)
         assert sequence.index("Q1:result-verdict") < sequence.index("Q2:method-screen")
         assert sequence.index("Q1:result-synthesis") < sequence.index("Q1:result-verdict")
-        assert pending["step"] == "markdown-build"
+        assert pending["status"] == "COMPLETE"
+        assert sequence[-1] == "Q2:solution-presentation"
         values = {q: w.read_json(root / f"results/{q}/experiments/round1/run_summary.json")["primary_metric"]["value"] for q in ("Q1", "Q2")}
         contexts = {q: w.read_json(root / f"planning/context/{q}_active_context.json") for q in ("Q1", "Q2")}
         assert all(any(row.get("kind") == "model_result" for row in context["supported_findings"])
@@ -253,7 +233,7 @@ def run_smoke():
         changed = root / "workspace/data/clean.csv"
         changed.write_text(changed.read_text() + "20,41\n")
         state = w.cmd_status(root, argparse.Namespace(question=None))
-        assert all(not q["allowed"]["paper_writing"] for q in state["questions"])
-        return {"status": "PASSED", "runtime_check": "PASSED", "rerun_next": "model-run", "scope": "real two-question computation, receipts, result evidence, decisions, freeze and paper sections",
+        assert all(not q["allowed"]["solution_presentation"] for q in state["questions"])
+        return {"status": "PASSED", "runtime_check": "PASSED", "rerun_next": "model-run", "scope": "real two-question computation, receipts, result evidence, decisions, and formal solution presentation",
                 "steps": sequence, "observed_path_pauses": pauses, "metrics": values, "upstream_mutation_invalidated": True,
-                "publication": "NOT TESTED HERE: real PDF/DOCX rendering and submission-audit render evidence remain separate acceptance tests"}
+                "terminal_step": "solution-presentation"}

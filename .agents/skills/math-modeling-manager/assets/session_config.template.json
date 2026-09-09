@@ -10,10 +10,6 @@
   "require_result_verdict": true,
   "evidence_depth": "source_scan",
   "research_budget_minutes": 30,
-  "paper_reserve_minutes": 180,
-  "paper_language": "zh-CN",
-  "paper_format": "latex",
-  "delivery_mode": "latex_primary_docx_mirror",
   "random_seed": 2026,
   "notes": []
 }

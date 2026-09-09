@@ -37,11 +37,11 @@ class WorkflowRuntimeTest(unittest.TestCase):
 
         submission = workflow.load_template("submission")
         lean = workflow.load_template("lean")
-        self.assertEqual(len(submission["steps"]), 29)
+        self.assertEqual(len(submission["steps"]), 17)
         self.assertEqual(len(lean["steps"]), 16)
         expected_pauses = {
             "material_framing_ambiguity", "final_method_choice",
-            "result_accept_adjust_or_fallback", "number_freeze_and_claim_scope",
+            "result_accept_adjust_or_fallback",
         }
         for template in (submission, lean):
             reasons = {step["checkpoint"]["reason"] for step in template["steps"] if step.get("checkpoint")}
@@ -68,36 +68,15 @@ class WorkflowRuntimeTest(unittest.TestCase):
         self.assertEqual(result["rerun_next"], "model-run")
         self.assertIn("final_method_choice", result["observed_path_pauses"])
 
-    def test_paper_and_language_variants(self) -> None:
+    def test_language_variant_and_terminal_step(self) -> None:
         template = workflow.load_template("submission")
-        dual_latex = workflow.applicable_steps(template, {
-            "paper_format": "latex", "delivery_mode": "latex_primary_docx_mirror",
-            "implementation_language": "python",
-        })
-        single_latex = workflow.applicable_steps(template, {
-            "paper_format": "latex", "delivery_mode": "single", "implementation_language": "python",
-        })
-        word = workflow.applicable_steps(template, {
-            "paper_format": "word", "delivery_mode": "single", "implementation_language": "python",
-        })
-        markdown = workflow.applicable_steps(template, {
-            "paper_format": "markdown", "delivery_mode": "single", "implementation_language": "python",
-        })
-        matlab = workflow.applicable_steps(template, {
-            "paper_format": "latex", "delivery_mode": "single", "implementation_language": "matlab",
-        })
-        self.assertIn("latex-build", {step["id"] for step in dual_latex})
-        self.assertIn("docx-export", {step["id"] for step in dual_latex})
-        self.assertNotIn("docx-export", {step["id"] for step in single_latex})
-        self.assertIn("word-build", {step["id"] for step in word})
-        self.assertIn("markdown-build", {step["id"] for step in markdown})
-        self.assertNotIn("latex-build", {step["id"] for step in word})
-        word_section = next(step for step in word if step["id"] == "paper-section")
-        self.assertEqual(word_section["outputs"], ["paper/sections/{question_lower}.md"])
-        matlab_run = next(step for step in matlab if step["id"] == "model-run")
+        python_steps = workflow.applicable_steps(template, {"implementation_language": "python"})
+        matlab_steps = workflow.applicable_steps(template, {"implementation_language": "matlab"})
+        self.assertEqual(python_steps[-1]["id"], "solution-presentation")
+        matlab_run = next(step for step in matlab_steps if step["id"] == "model-run")
         self.assertEqual(matlab_run["skill"], "matlab-model-code-generator")
 
-    def test_upstream_rerun_before_freeze_does_not_require_thaw(self) -> None:
+    def test_upstream_rerun_has_no_paper_freeze_state(self) -> None:
         with tempfile.TemporaryDirectory(prefix="workflow-rerun-test-") as temp:
             workspace = Path(temp)
             init_git(workspace)
@@ -107,8 +86,6 @@ class WorkflowRuntimeTest(unittest.TestCase):
                     profile="submission",
                     questions="Q1",
                     contest="CUMCM",
-                    paper_format="latex",
-                    delivery_mode="latex_primary_docx_mirror",
                     language="python",
                     seed=2026,
                     workflow_id="rerun-test",
@@ -120,7 +97,7 @@ class WorkflowRuntimeTest(unittest.TestCase):
             )
             manifest = workflow.load_manifest(workspace, "Q1")
             self.assertEqual(result["next"]["step"], "problem-frame")
-            self.assertNotEqual(manifest.get("freeze_state"), "thaw_required")
+            self.assertNotIn("freeze_state", manifest)
 
     def test_pause_and_resume_are_persistent(self) -> None:
         with tempfile.TemporaryDirectory(prefix="workflow-pause-test-") as temp:
@@ -132,8 +109,6 @@ class WorkflowRuntimeTest(unittest.TestCase):
                     profile="lean",
                     questions="Q1,Q2",
                     contest="CUMCM",
-                    paper_format="none",
-                    delivery_mode="single",
                     language="auto",
                     seed=2026,
                     workflow_id="pause-test",
@@ -147,27 +122,6 @@ class WorkflowRuntimeTest(unittest.TestCase):
             resumed = workflow.cmd_next(workspace, argparse.Namespace(question=None))
             self.assertEqual(resumed["status"], "READY")
             self.assertEqual(resumed["question_id"], "Q1")
-
-    def test_docx_delivery_step_invalidates_when_tex_bundle_changes(self) -> None:
-        template = workflow.load_template("submission")
-        steps = workflow.applicable_steps(template, {
-            "paper_format": "latex",
-            "delivery_mode": "latex_primary_docx_mirror",
-            "implementation_language": "python",
-        })
-        step = next(item for item in steps if item["id"] == "docx-export")
-        with tempfile.TemporaryDirectory(prefix="workflow-docx-stale-") as temp:
-            workspace = Path(temp)
-            (workspace / "paper" / "sections").mkdir(parents=True)
-            (workspace / "paper" / "main.tex").write_text("main\n", encoding="utf-8")
-            section = workspace / "paper" / "sections" / "q1.tex"
-            section.write_text("version one\n", encoding="utf-8")
-            workflow.create_smoke_output(workspace, step, "Q1")
-            manifest = {"question_id": "Q1", "steps": {}}
-            self.assertTrue(workflow.step_complete(workspace, manifest, step))
-            section.write_text("version two\n", encoding="utf-8")
-            self.assertFalse(workflow.step_complete(workspace, manifest, step))
-
 
 if __name__ == "__main__":
     unittest.main()

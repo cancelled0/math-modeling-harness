@@ -17,14 +17,6 @@
 | `python-code-reviewer` / `matlab-code-reviewer` | 运行或实现后 | review JSON → result evaluator |
 | `result-evaluator` | 运行后诊断或综合 | assessment/result evidence → robustness/决定 |
 | `robustness-checker` | 结果风险需要验证 | robustness summary → result evidence |
-| `modeling-results-presenter` | 用户要求完整求解展示 | 派生 presentation 视图，不改变状态 |
-| `final-method-explainer` | 结果证据可供最终解释 | 方法解释 → 写作包 |
-| `solution-package-builder` | submission 结果决定后 | 写作包与 claim freeze → 图表/写作 |
-| `figure-table-planner` / `math-figure-generator` | 有冻结声明且图表有帮助 | 最小计划与 manifest → 写作 |
-| `paper-section-writer` / `paper-polisher` | 冻结后写作或润色 | 分节 → 引用/交付 |
-| `reference-manager` | 引用需要核验 | refs 与审计 → 交付 |
-| `latex-paper-zh` / `latex-paper-en` | LaTeX 交付 | PDF/可选 DOCX → submission audit |
-| `submission-auditor` | 交付完成 | 一次完整性/一致性审计 → QA |
-| `quality-assurance-auditor` | 最终抽样质量门 | `paper/qa_report.json` |
+| `modeling-results-presenter` | 结果证据就绪 | 正式求解过程与结果展示 → 流程完成 |
 
 库型 Skill 只在方法族已批准或用户明确要求时调用，不扩张候选池、不绕过运行器：`cuopt-numerical-optimization-formulation`、`geopandas`、`networkx`、`pymc`、`pymoo`、`scikit-learn`、`shap`、`simpy`、`skforecast-recursive-direct`、`statsmodels`、`sympy`、`uncertainty-and-units`、`statistical-analysis`、`statistical-power`、`experimental-design`、`scientific-visualization`、`modeling-thought-partner`、`math-modeling-manager`、`workflow-orchestrator`、`exploratory-data-analysis`。

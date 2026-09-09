@@ -39,23 +39,10 @@ ORCHESTRATOR_REQUIRED = (
     "scripts/checks/leakage_check.py",
     "scripts/checks/method_reference_check.py",
     "scripts/checks/modeling_coverage_check.py",
-    "scripts/checks/claim_code_check.py",
-    "scripts/checks/frozen_number_check.py",
-    "scripts/checks/reference_check.py",
-    "scripts/checks/delivery_check.py",
-    "scripts/checks/docx_delivery_check.py",
+    "scripts/checks/solution_presentation_check.py",
     "scripts/contracts.py",
     "scripts/smoke_case.py",
     "references/runtime-contract.md",
-)
-
-LATEX_ZH_REQUIRED = (
-    "SKILL.md",
-    "scripts/compile_latex.py",
-    "scripts/check_latex_delivery.py",
-    "scripts/export_docx.py",
-    "scripts/check_docx_delivery.py",
-    "evals/test_latex_tools.py",
 )
 
 BUILTIN_CHECKS = {"human_decision_check", "git_context_check", "evidence_check", "scientific_check", "audit_check"}
@@ -83,7 +70,6 @@ ALLOWED_PAUSES = {
     "material_framing_ambiguity",
     "final_method_choice",
     "result_accept_adjust_or_fallback",
-    "number_freeze_and_claim_scope",
 }
 
 
@@ -131,7 +117,7 @@ def check_explicit_skill_refs(skill_root: Path, names: set[str]) -> list[str]:
     )
     pattern = re.compile(keyword + r"[^\n`]{0,80}`([a-z0-9][a-z0-9-]{1,62})`", re.I)
     # Supporting references may have their own module routers whose names are not
-    # project Skills (for example latex-paper-en's `logic` module). Cross-Skill
+    # project Skills. Cross-Skill
     # handoffs belong in entrypoints; manager references are covered separately
     # by the registry, routing-matrix coverage, and Markdown-link checks.
     for path in skill_root.rglob("SKILL.md"):
@@ -165,19 +151,12 @@ def audit() -> tuple[list[str], dict]:
     else:
         artifact_contracts = load_json(contract_path).get("contracts", {})
 
-    latex_zh_dir = skill_root / "latex-paper-zh"
-    for rel in LATEX_ZH_REQUIRED:
-        if not (latex_zh_dir / rel).exists():
-            errors.append(f"missing Chinese LaTeX delivery file: {rel}")
-
     session_template = load_json(manager_dir / "assets" / "session_config.template.json")
-    if session_template.get("delivery_mode") != "latex_primary_docx_mirror":
-        errors.append("submission session default must use the canonical-LaTeX DOCX mirror mode")
     if {"execution_policy", "evidence_policy", "version_control"} & set(session_template):
         errors.append("session config template must use one flat runtime configuration")
     required_config = {
         "feature_engineering", "detailed_code_plan", "robustness_required", "require_result_verdict",
-        "evidence_depth", "research_budget_minutes", "paper_reserve_minutes",
+        "evidence_depth", "research_budget_minutes",
     }
     if not required_config <= set(session_template):
         errors.append(f"session config template lacks canonical fields: {sorted(required_config - set(session_template))}")
@@ -211,7 +190,7 @@ def audit() -> tuple[list[str], dict]:
         errors.append("duplicate frontmatter skill names")
 
     categories = set(registry.get("categories", []))
-    terminal = {"quality-assurance-auditor"}
+    terminal = {"modeling-results-presenter"}
     for entry in entries:
         name = entry.get("name")
         if entry.get("category") not in categories:
@@ -272,11 +251,9 @@ def audit() -> tuple[list[str], dict]:
             errors.append(f"cannot resolve {template_name}: {exc}")
             continue
         defaults = template.get("defaults", {})
-        if defaults.get("delivery_mode") not in {"single", "latex_primary_docx_mirror"}:
-            errors.append(f"template {template_name} has invalid default delivery_mode")
         steps = template.get("steps", [])
         step_ids = [step.get("id") for step in steps]
-        gate_order = {name: index for index, name in enumerate(("G0", "G1", "G2", "G2.5", "G3", "G4", "G5", "G6"))}
+        gate_order = {name: index for index, name in enumerate(("G0", "G1", "G2", "G2.5", "G3", "G4"))}
         previous_gate = -1
         checkpoint_reasons = []
         if len(step_ids) != len(set(step_ids)):
@@ -285,7 +262,7 @@ def audit() -> tuple[list[str], dict]:
             skill = step.get("skill")
             if skill not in registry_set:
                 errors.append(f"template {template_name} has missing skill: {skill}")
-            for variants_name in ("language_variants", "paper_format_variants"):
+            for variants_name in ("language_variants",):
                 variants = step.get(variants_name, {})
                 if not isinstance(variants, dict):
                     errors.append(f"template {template_name} step {step.get('id')} has invalid {variants_name}")
@@ -297,11 +274,6 @@ def audit() -> tuple[list[str], dict]:
                             f"template {template_name} step {step.get('id')} variant {variant_name} "
                             f"has missing skill: {variant_skill}"
                         )
-            delivery_modes = step.get("delivery_modes", [])
-            if not isinstance(delivery_modes, list) or any(
-                mode not in {"single", "latex_primary_docx_mirror"} for mode in delivery_modes
-            ):
-                errors.append(f"template {template_name} step {step.get('id')} has invalid delivery_modes")
             for field in ("id", "outputs", "checks", "gate_after"):
                 if field not in step:
                     errors.append(f"template {template_name} step {step.get('id')} missing {field}")
@@ -327,15 +299,11 @@ def audit() -> tuple[list[str], dict]:
                     errors.append(f"template {template_name} checkpoint can auto-approve: {step.get('id')}")
                 if not checkpoint.get("decision_type"):
                     errors.append(f"template {template_name} checkpoint lacks decision_type: {step.get('id')}")
-        if len(checkpoint_reasons) != 4 or set(checkpoint_reasons) != ALLOWED_PAUSES:
-            errors.append(f"template {template_name} must derive exactly the four allowed pause types from steps")
+        if len(checkpoint_reasons) != 3 or set(checkpoint_reasons) != ALLOWED_PAUSES:
+            errors.append(f"template {template_name} must derive exactly the three allowed pause types from steps")
+        if not steps or steps[-1].get("id") != "solution-presentation" or steps[-1].get("skill") != "modeling-results-presenter":
+            errors.append(f"template {template_name} must end at the formal solution presentation")
         template_summaries.append({"template": template_name, "steps": len(steps)})
-
-    submission = workflow_runtime.load_template("submission") if workflow_runtime is not None else {"steps": []}
-    submission_steps = {step.get("id"): step for step in submission.get("steps", [])}
-    docx_step = submission_steps.get("docx-export")
-    if not docx_step or docx_step.get("delivery_modes") != ["latex_primary_docx_mirror"]:
-        errors.append("submission template lacks the canonical-LaTeX DOCX mirror route")
 
     cases = load_json(cases_path).get("cases", [])
     if len(cases) < 30:
@@ -362,7 +330,7 @@ def audit() -> tuple[list[str], dict]:
             errors.append(f"routing case {case.get('id')} declares a pause reason without pausing")
     if observed_pauses != ALLOWED_PAUSES:
         errors.append(
-            f"routing cases must cover exactly four human pause types; found {sorted(observed_pauses)}"
+            f"routing cases must cover exactly three human pause types; found {sorted(observed_pauses)}"
         )
 
     summary = {

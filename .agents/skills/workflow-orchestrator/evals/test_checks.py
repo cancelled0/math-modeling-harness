@@ -71,34 +71,6 @@ class DeterministicChecksTest(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(report["status"], "PASSED")
 
-    def test_frozen_number_check_verifies_source_locator_and_decision(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="check-freeze-") as temp:
-            root = Path(temp)
-            source = root / "results.json"
-            source.write_text(json.dumps({"metrics": {"rmse": 1.25}}), encoding="utf-8")
-            freeze = root / "frozen.json"
-            freeze.write_text(
-                json.dumps(
-                    {
-                        "claims": [
-                            {
-                                "claim_id": "q1_rmse",
-                                "value": 1.25,
-                                "source_file": "results.json",
-                                "source_locator": "$.metrics.rmse",
-                                "decision_id": "decision-1",
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
-            code, report = run_check(
-                "frozen_number_check.py", str(freeze), "--workspace", str(root), cwd=root
-            )
-            self.assertEqual(code, 0)
-            self.assertEqual(report["status"], "PASSED")
-
     def test_artifact_check_rejects_paths_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory(prefix="check-artifact-") as temp:
             root = Path(temp)

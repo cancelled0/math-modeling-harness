@@ -79,38 +79,12 @@
         "nonempty": ["results", "evidence_files"]
       }
     ],
-    "figure-plan": [
+    "solution-presentation": [
       {
         "output_index": 0,
-        "required": ["schema_version", "status", "question_id", "items"],
-        "conditional": ["items_or_omission_reason"]
-      }
-    ],
-    "figures": [
-      {
-        "output_index": 0,
-        "required": ["schema_version", "status", "question_id", "figures"],
-        "conditional": ["figures_or_omission_reason"]
-      }
-    ],
-    "freeze": [
-      {
-        "output_index": 1,
-        "required": ["schema_version", "status", "question_id", "claim_scope", "claims", "evidence_files"]
-      }
-    ],
-    "submission-audit": [
-      {
-        "output_index": 0,
-        "required": ["schema_version", "status", "checks", "evidence_files", "delivery_files", "render_review", "unresolved"],
-        "nonempty": ["checks", "evidence_files", "delivery_files", "render_review"]
-      }
-    ],
-    "quality-audit": [
-      {
-        "output_index": 0,
-        "required": ["schema_version", "status", "sampled_checks", "evidence_files", "unresolved"],
-        "nonempty": ["sampled_checks", "evidence_files"]
+        "required": ["schema_version", "status", "question_id", "experiment_id", "title", "problem_goal", "run_summary", "assumptions", "preparation", "derivations", "model", "algorithm", "results", "conclusions", "diagnostics", "evidence_files"],
+        "allowed_values": {"status": ["ready_for_review"]},
+        "nonempty": ["title", "problem_goal", "run_summary", "preparation", "model", "algorithm", "results", "conclusions", "diagnostics", "evidence_files"]
       }
     ]
   }

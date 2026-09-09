@@ -18,9 +18,9 @@ pause / resume / rerun / check / compare / export / reconfigure / migrate / smok
 
 ## 主链
 
-`problem-frame → data/evidence → method-screen → method-choice → git-experiment → foundations → optional implementation-spec → model-run → code-review → run-assessment → optional robustness → result-synthesis → optional result-verdict`
+`problem-frame → data/evidence → method-screen → method-choice → git-experiment → foundations → optional implementation-spec → model-run → code-review → run-assessment → optional robustness → result-synthesis → optional result-verdict → solution-presentation`
 
-submission 继续 `method-explanation → claim_freeze → figures/writing/delivery → submission-audit → quality-audit`。问题契约合并了解析和分类；决策由本运行器的 `record-decision` 内部操作保存；代码审查直接按实现语言路由；结果展示 Skill 仅按需调用。
+两种 profile 都以正式求解过程与结果展示结束；submission 保留更完整的学术证据、鲁棒性和结果判断要求。问题契约合并解析和分类；决策由本运行器的 `record-decision` 保存；代码审查直接按实现语言路由。
 
 ## 运行规则
 
@@ -32,4 +32,4 @@ submission 继续 `method-explanation → claim_freeze → figures/writing/deliv
 
 ## 检查
 
-运行 `workflow.py check`、`workflow.py smoke` 和管理器 `audit_skill_routes.py`。工具链 unavailable 时保留明确状态，不伪造 PDF、DOCX、图表或数值。
+运行 `workflow.py check`、`workflow.py smoke` 和管理器 `audit_skill_routes.py`。工具链 unavailable 时保留明确状态，不伪造结果、图表或数值。

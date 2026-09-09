@@ -20,7 +20,7 @@ CHECK_DIR = SCRIPT_DIR / "checks"
 sys.path.insert(0, str(SCRIPT_DIR))
 import contracts as c
 
-GATE_ORDER = {"G0": 0, "G1": 1, "G2": 2, "G2.5": 3, "G3": 4, "G4": 5, "G5": 6, "G6": 7}
+GATE_ORDER = {"G0": 0, "G1": 1, "G2": 2, "G2.5": 3, "G3": 4, "G4": 5}
 RUNTIME_REVISION = 3
 
 class WorkflowError(RuntimeError):
@@ -138,15 +138,8 @@ def applicable_steps(template, config):
     for raw in template["steps"]:
         step = copy.deepcopy(raw)
         step.update(raw.get("language_variants", {}).get(config.get("implementation_language", "python"), {}))
-        step.update(raw.get("paper_format_variants", {}).get(config.get("paper_format"), {}))
-        if step.get("paper_formats") and config.get("paper_format") not in step["paper_formats"]:
-            continue
-        if step.get("delivery_modes") and config.get("delivery_mode", "single") not in step["delivery_modes"]:
-            continue
         if step.get("optional_config") and not config.get(step["optional_config"]):
             continue
-        if step["id"] == "latex-build" and config.get("paper_language", "zh-CN").startswith("en"):
-            step["skill"] = "latex-paper-en"
         result.append(step)
     return result
 
@@ -236,8 +229,6 @@ def snapshot(root, step, nodes):
     data = c.fingerprints(root, [p for p in step["outputs"] if not p.endswith(".jsonl")] + evidence_paths(step, nodes))
     if step.get("checkpoint"):
         data["@decision"] = hash_value(decision_for(root, step))
-    if step.get("delivery_artifact") or step["id"] in {"submission-audit", "quality-audit"}:
-        data.update(c.fingerprints(root, ["paper/sections", "paper/figures", "paper/refs.bib"]))
     return data
 
 def state(root, run, template, override=None):
@@ -288,14 +279,14 @@ def derive_question(root, run, template, manifest, computed=None):
                 gate = candidate
     complete = all(valid.values())
     action = action_for(root, run, nodes, valid, q)
-    manifest.update(current_gate="G6" if complete and run["profile"] == "submission" else min(gate, "G5", key=GATE_ORDER.get),
+    manifest.update(current_gate=gate,
         status="completed" if complete else ("waiting_human" if action.get("owner") == "human" else action["status"].lower()),
         next_action=action if action["status"] == "READY" else None,
         blockers=[v for k, v in errors.items() if k.startswith(q + ":")])
     accepted_result = valid.get(f"{q}:result-verdict", False) if run["config"].get("require_result_verdict") else valid.get(f"{q}:result-synthesis", False)
     manifest["allowed"] = {"code_generation": valid.get(f"{q}:method-choice", False),
-        "freeze": accepted_result, "paper_writing": valid.get(f"{q}:freeze", False),
-        "final_assembly": all(valid.get(f"{x}:paper-section", False) for x in run["questions"])}
+        "solution_presentation": accepted_result,
+        "workflow_complete": valid.get(f"{q}:solution-presentation", False)}
     return manifest
 
 
@@ -381,7 +372,8 @@ def context_source_paths(run, q):
         f"results/{q}/experiments/{iteration}/run_summary.json",
         f"results/{q}/reports/{lower}_run_assessment.json",
         f"results/{q}/reports/{lower}_result_evidence.json",
-        f"results/{q}/reports/frozen_numbers.json",
+        f"results/{q}/reports/{lower}_solution_presentation.json",
+        f"results/{q}/reports/{lower}_solution_presentation.md",
         f"robustness/{q}/{lower}_robustness_summary.json",
     ]
 
@@ -520,8 +512,6 @@ def build_active_context(root, run, template, q, computed=None):
     result_evidence = read_json_optional(root / result_raw)
     robustness_raw = f"robustness/{q}/{q.lower()}_robustness_summary.json"
     robustness = read_json_optional(root / robustness_raw)
-    freeze_raw = f"results/{q}/reports/frozen_numbers.json"
-    frozen = read_json_optional(root / freeze_raw)
     confirmed, stale_decisions = decision_context_summary(root, run, nodes, valid, q)
     experiment, registry_rows = experiment_summary(root, run, q)
 
@@ -540,7 +530,6 @@ def build_active_context(root, run, template, q, computed=None):
     accepted_result = (valid.get(f"{q}:result-verdict", False) if run["config"].get("require_result_verdict")
                        else valid.get(f"{q}:result-synthesis", False))
     robustness_current = valid.get(f"{q}:robustness", False)
-    freeze_current = valid.get(f"{q}:freeze", False)
     supported = []
     hypotheses = []
     if result_evidence:
@@ -550,9 +539,6 @@ def build_active_context(root, run, template, q, computed=None):
     if robustness and robustness_current:
         supported.extend(normalized_findings(robustness.get("findings"), robustness_raw, "robustness",
                                              "current experiment and tested perturbations"))
-    if frozen and freeze_current:
-        claims = frozen.get("claims", frozen.get("frozen_numbers", frozen.get("items", [])))
-        supported.extend(normalized_findings(claims, freeze_raw, "frozen_claim", "approved claim scope"))
     if subquestion:
         hypotheses.extend(normalized_findings(subquestion.get("proposed_relationships"),
                                               "planning/problem_contract.json", "proposed_relationship"))
@@ -591,8 +577,7 @@ def build_active_context(root, run, template, q, computed=None):
                          "regenerate_with": f"workflow.py --workspace <workspace> context --question {q}"},
         "workflow": {
             "workflow_id": run.get("workflow_id"), "profile": run["profile"], "contest_profile": run["config"].get("contest_profile"),
-            "implementation_language": run["config"].get("implementation_language"), "paper_format": run["config"].get("paper_format"),
-            "delivery_mode": run["config"].get("delivery_mode"), "question_id": q, "gate": question_state.get("current_gate"),
+            "implementation_language": run["config"].get("implementation_language"), "question_id": q, "gate": question_state.get("current_gate"),
             "status": question_state.get("status"), "run_status": run.get("status"), "current_step": current_step,
         },
         "problem": {
@@ -736,12 +721,6 @@ def step_complete(root, manifest, step):
         paths = [root / p for p in outputs_for(step, manifest["question_id"])]
         if not all(p.is_file() and p.stat().st_size for p in paths):
             return False
-        if step.get("id") == "docx-export":
-            files = sorted((root / "paper").rglob("*.tex"))
-            snap = [(p.relative_to(root).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest()) for p in files]
-            old = manifest.get("_compat_snapshot")
-            manifest["_compat_snapshot"] = snap
-            return old is None or old == snap
         return True
     run, template = load_runtime(root)
     return state(root, run, template, manifest)[2].get(f"{manifest['question_id']}:{step['id']}", False)
@@ -750,16 +729,13 @@ def resolved_config(root, args, session, template):
     config = copy.deepcopy(template["defaults"])
     configurable = set(config) | {"random_seed", "deadline_at"}
     config.update({key: copy.deepcopy(session[key]) for key in configurable if key in session})
-    for argument, key in {"contest": "contest_profile", "paper_format": "paper_format", "delivery_mode": "delivery_mode",
-        "language": "implementation_language", "seed": "random_seed", "paper_language": "paper_language"}.items():
+    for argument, key in {"contest": "contest_profile", "language": "implementation_language", "seed": "random_seed"}.items():
         value = getattr(args, argument, None)
         if value is not None:
             config[key] = value
     if config.get("implementation_language", "auto") == "auto":
         config["implementation_language"] = "matlab" if any((root / "code").rglob("*.m")) else "python"
-    if config.get("paper_format") != "latex":
-        config["delivery_mode"] = "single"
-    for key, value in {"random_seed": 2026, "question_dependencies": {}, "research_budget_minutes": 30, "paper_reserve_minutes": 180}.items():
+    for key, value in {"random_seed": 2026, "question_dependencies": {}, "research_budget_minutes": 30}.items():
         config.setdefault(key, value)
     return config
 
@@ -808,8 +784,6 @@ def cmd_next(root, args):
     if deadline:
         remaining = (datetime.fromisoformat(deadline.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds() / 60
         result["remaining_minutes"] = round(remaining, 1)
-        if remaining <= run["config"]["paper_reserve_minutes"]:
-            result["time_guidance"] = "protect paper time; finish minimum viable answers; defer optional experiments; never auto-approve"
     result["context_refresh"] = refresh_active_contexts(root, run, template, refresh_questions, computed=computed)
     return result
 
@@ -911,8 +885,6 @@ def cmd_finish(root, args):
                                 else "keep the approved method-family branch and record a new run")
         return result
     record.update(status="completed", snapshot=snapshot(root, step, nodes), completed_at=now(), error=None)
-    if step["id"] == "freeze":
-        manifest["freeze_state"] = "frozen"
     save_manifest(root, manifest)
     index = read_json(runtime_paths(root)["artifacts"])
     key = f"{step['question_id']}:{step['id']}"
@@ -958,9 +930,6 @@ def cmd_rerun(root, args):
         step = nodes[node]
         manifest = manifests[step["question_id"]]
         rec = step_record(manifest, step["id"])
-        if step["id"] == "freeze" and rec.get("status") == "completed":
-            manifest["freeze_state"] = "thaw_required"
-            record_event(root, "thaw", question_id=step["question_id"], cause=key)
         rec.update(status="stale", error=None, stale_since=now())
     for manifest in manifests.values():
         save_manifest(root, manifest)
@@ -1013,10 +982,8 @@ def cmd_reconfigure(root, args):
         if not manifest_path(root, q).exists():
             save_manifest(root, initial_manifest(q, profile))
     changed = {k for k in set(previous) | set(config) if previous.get(k) != config.get(k)}
-    paper_only = changed <= {"paper_format", "delivery_mode", "paper_language", "research_budget_minutes", "paper_reserve_minutes", "deadline_at"}
     for q in run["questions"]:
-        target = "paper-section" if paper_only and profile == "submission" and not migrate else "problem-frame"
-        cmd_rerun(root, argparse.Namespace(question=q, from_step=target, new_run=False, new_branch=False, new_experiment=False))
+        cmd_rerun(root, argparse.Namespace(question=q, from_step="problem-frame", new_run=False, new_branch=False, new_experiment=False))
     record_event(root, "reconfigured", changed=sorted(changed), backup=str(backup))
     return {"status": "RECONFIGURED", "backup": str(backup), "next": cmd_next(root, argparse.Namespace(question=None))}
 
@@ -1037,17 +1004,14 @@ def cmd_export(root, args):
     target = args.destination.resolve()
     if target.exists():
         raise WorkflowError("destination exists")
-    overleaf = getattr(args, "overleaf", False)
-    roots = ["paper"] if overleaf else ["planning", "methods", "code", "results", "robustness", "paper", "workspace"]
+    roots = ["planning", "methods", "code", "results", "robustness", "workspace"]
     excluded = {"data_raw", "raw", "__pycache__", ".git", ".venv", "cache"}
     files = [p for name in roots for p in (root / name).rglob("*") if p.is_file() and not excluded.intersection(p.relative_to(root).parts)
              and p.suffix not in {".aux", ".log", ".tmp", ".pyc"}]
-    if overleaf:
-        files = [p for p in files if p.suffix in {".tex", ".bib", ".cls", ".sty", ".png", ".jpg", ".pdf", ".eps"} and p.name != "main.pdf" and "exports" not in p.parts]
     target.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
         for p in files:
-            out.write(p, p.relative_to(root / "paper" if overleaf else root).as_posix())
+            out.write(p, p.relative_to(root).as_posix())
     return {"status": "EXPORTED", "destination": str(target), "files": len(files)}
 
 def cmd_decision_context(root, args):
@@ -1091,31 +1055,14 @@ def smoke_test():
 
 
 def create_smoke_output(workspace, step, question):
-    """Compatibility fixture for focused delivery-check tests; formal runtime never uses it."""
+    """Compatibility fixture for focused artifact tests; formal runtime never uses it."""
     for raw in outputs_for(step, question):
         path = workspace / raw
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.suffix == ".json":
             write_json(path, {"status": "passed", "schema_version": 1})
-        elif path.suffix == ".docx":
-            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("[Content_Types].xml", "<Types/>")
-                archive.writestr("word/document.xml", "<document/>")
         else:
             path.write_text("compatibility smoke fixture\n", encoding="utf-8")
-    if step.get("id") == "docx-export":
-        source = workspace / "paper/main.tex"
-        source.parent.mkdir(parents=True, exist_ok=True)
-        if not source.exists():
-            source.write_text("fixture\n", encoding="utf-8")
-        docx = workspace / "paper/exports/main.docx"
-        docx.parent.mkdir(parents=True, exist_ok=True)
-        if not docx.exists():
-            with zipfile.ZipFile(docx, "w", zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("[Content_Types].xml", "<Types/>")
-                archive.writestr("word/document.xml", "<document/>")
-        write_json(workspace / "paper/docx_export_report.json", {"status": "passed", "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(), "source_bundle_sha256": "fixture", "output_sha256": hashlib.sha256(docx.read_bytes()).hexdigest()})
-        write_json(workspace / "paper/docx_delivery_check.json", {"status": "passed"})
 
 def build_parser():
     p = argparse.ArgumentParser()
@@ -1125,10 +1072,7 @@ def build_parser():
     init.add_argument("--profile", choices=("lean", "submission"))
     init.add_argument("--questions")
     init.add_argument("--contest")
-    init.add_argument("--paper-format", choices=("latex", "word", "markdown", "none"))
-    init.add_argument("--delivery-mode", choices=("single", "latex_primary_docx_mirror"))
     init.add_argument("--language", choices=("auto", "python", "matlab"))
-    init.add_argument("--paper-language")
     init.add_argument("--workflow-id")
     init.add_argument("--seed", type=int)
     init.add_argument("--allow-no-git", action="store_true")
@@ -1166,7 +1110,6 @@ def build_parser():
     comp.add_argument("--output")
     export = sub.add_parser("export")
     export.add_argument("--destination", type=Path, required=True)
-    export.add_argument("--overleaf", action="store_true")
     return p
 
 def main():

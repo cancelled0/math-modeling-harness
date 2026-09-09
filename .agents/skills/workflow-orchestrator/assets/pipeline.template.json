@@ -2,11 +2,9 @@
   "schema_version": 1,
   "defaults": {
     "contest_profile": "CUMCM",
-    "paper_language": "zh-CN",
     "implementation_language": "auto",
     "evidence_depth": "source_scan",
     "research_budget_minutes": 30,
-    "paper_reserve_minutes": 180,
     "feature_engineering": false,
     "detailed_code_plan": false,
     "question_dependencies": {}
@@ -111,88 +109,10 @@
       }
     },
     {
-      "id": "method-explanation", "skill": "final-method-explainer",
-      "outputs": ["methods/{question}/{question_lower}_final_method_explanation.md"],
-      "checks": ["artifact_check"], "gate_after": "G4"
-    },
-    {
-      "id": "freeze", "skill": "solution-package-builder",
-      "outputs": ["results/{question}/reports/{question_lower}_solution_package_for_writer.md", "results/{question}/reports/frozen_numbers.json"],
-      "artifact_key": "frozen_numbers", "checks": ["artifact_check", "frozen_number_check"], "gate_after": "G4",
-      "checkpoint": {
-        "reason": "number_freeze_and_claim_scope", "policy": "never_auto_approve",
-        "decision_type": "claim_freeze", "decision_file": "methods/{question}/{question_lower}_decisions.jsonl",
-        "choices": ["accept", "downgrade", "drop"]
-      }
-    },
-    {
-      "id": "figure-plan", "skill": "figure-table-planner",
-      "outputs": ["methods/{question}/{question_lower}_figure_table_plan.json"],
-      "checks": ["artifact_check"], "gate_after": "G4"
-    },
-    {
-      "id": "figures", "skill": "math-figure-generator",
-      "outputs": ["paper/figures/{question_lower}_figure_manifest.json"],
-      "checks": ["artifact_check"], "gate_after": "G4"
-    },
-    {
-      "id": "paper-section", "skill": "paper-section-writer",
-      "outputs": ["paper/drafts/{question_lower}.tex"], "artifact_key": "paper_section",
-      "checks": ["artifact_check", "claim_code_check"], "gate_after": "G4",
-      "paper_format_variants": {
-        "word": {"outputs": ["paper/sections/{question_lower}.md"]},
-        "markdown": {"outputs": ["paper/sections/{question_lower}.md"]}
-      }
-    },
-    {
-      "id": "paper-polish", "skill": "paper-polisher",
-      "outputs": ["paper/sections/{question_lower}.tex"], "checks": ["artifact_check"], "gate_after": "G4",
-      "paper_format_variants": {
-        "word": {"outputs": ["paper/sections/{question_lower}.md"]},
-        "markdown": {"outputs": ["paper/sections/{question_lower}.md"]}
-      }
-    },
-    {
-      "id": "references", "skill": "reference-manager",
-      "outputs": ["paper/refs.bib", "paper/reference_audit.md", "paper/reference_audit.json"],
-      "checks": ["artifact_check", "audit_check", "reference_check"], "gate_after": "G4", "scope": "global"
-    },
-    {
-      "id": "latex-build", "skill": "latex-paper-zh",
-      "outputs": ["paper/main.tex", "paper/main.pdf", "paper/latex_build_report.json", "paper/latex_delivery_check.json"],
-      "artifact_key": "paper_pdf", "checks": ["artifact_check", "reference_check", "delivery_check"],
-      "gate_after": "G5", "paper_formats": ["latex"], "delivery_artifact": true, "scope": "global"
-    },
-    {
-      "id": "docx-export", "skill": "latex-paper-zh",
-      "outputs": ["paper/exports/main.docx", "paper/docx_export_report.json", "paper/docx_delivery_check.json"],
-      "artifact_key": "paper_docx_mirror", "checks": ["artifact_check", "docx_delivery_check"],
-      "gate_after": "G5", "paper_formats": ["latex"], "delivery_modes": ["latex_primary_docx_mirror"],
-      "delivery_artifact": true, "external_capabilities": ["documents", "docx-render-verification"], "scope": "global"
-    },
-    {
-      "id": "word-build", "skill": "paper-section-writer",
-      "outputs": ["paper/main.docx", "paper/main.pdf"], "artifact_key": "paper_pdf",
-      "checks": ["artifact_check", "delivery_check"], "gate_after": "G5", "paper_formats": ["word"],
-      "delivery_artifact": true, "external_capabilities": ["documents", "pdf-render-verification"], "scope": "global"
-    },
-    {
-      "id": "markdown-build", "skill": "paper-section-writer",
-      "outputs": ["paper/main.md", "paper/main.pdf"], "artifact_key": "paper_pdf",
-      "checks": ["artifact_check", "delivery_check"], "gate_after": "G5", "paper_formats": ["markdown"],
-      "delivery_artifact": true, "external_capabilities": ["documents", "pdf-render-verification"], "scope": "global"
-    },
-    {
-      "id": "submission-audit", "skill": "submission-auditor",
-      "outputs": ["paper/audits/submission_audit.json", "paper/audits/submission_audit.md"],
-      "artifact_key": "submission_audit", "checks": ["artifact_check", "audit_check"],
-      "gate_after": "G5", "scope": "global"
-    },
-    {
-      "id": "quality-audit", "skill": "quality-assurance-auditor",
-      "outputs": ["paper/qa_report.json", "paper/qa_report.md"], "artifact_key": "quality_audit",
-      "checks": ["artifact_check", "delivery_check", "audit_check"],
-      "gate_after": "G6", "scope": "global"
+      "id": "solution-presentation", "skill": "modeling-results-presenter",
+      "outputs": ["results/{question}/reports/{question_lower}_solution_presentation.json", "results/{question}/reports/{question_lower}_solution_presentation.md"],
+      "artifact_key": "solution_presentation", "checks": ["artifact_check", "solution_presentation_check"], "gate_after": "G4",
+      "inputs": ["methods/{question}/method_contract.json", "methods/{question}/{question_lower}_foundations.json", "results/{question}/reports/{question_lower}_run_assessment.json", "results/{question}/reports/{question_lower}_result_evidence.json"]
     }
   ],
   "runtime_revision": 3

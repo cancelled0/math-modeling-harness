@@ -125,10 +125,6 @@ def artifact_contract_errors(step_id, outputs, root):
         for condition in artifact.get("conditional", []):
             if condition == "input_files_or_no_data_reason" and not data.get("input_files") and not data.get("no_data_reason"):
                 errors.append("no-data task must explain no_data_reason")
-            elif condition == "items_or_omission_reason" and not data.get("items") and not data.get("omission_reason"):
-                errors.append("empty figure plan must explain omission_reason")
-            elif condition == "figures_or_omission_reason" and not data.get("figures") and not data.get("omission_reason"):
-                errors.append("empty figure manifest must explain omission_reason")
         if step_id == "run-assessment" and data.get("status") == "needs_repair" and not data.get("rerun_from"):
             errors.append("repair assessment must declare rerun_from")
     return errors
@@ -233,11 +229,7 @@ def execute(root, step, config):
         "modeling_coverage_check": [str(summary)],
         "leakage_check": [str(summary)],
         "data_ingest_check": [str(root / "workspace/data/source_registry.json"), "--workspace", str(root)],
-        "frozen_number_check": [str(root / f"results/{q}/reports/frozen_numbers.json"), "--workspace", str(root)],
-        "claim_code_check": [str(root / f"results/{q}/reports/frozen_numbers.json"), "--workspace", str(root)],
-        "reference_check": ["--tex", str(root / "paper"), "--bib", str(root / "paper/refs.bib")],
-        "delivery_check": ["--paper-root", str(root / "paper"), "--format", config.get("paper_format", "latex")],
-        "docx_delivery_check": ["--paper-root", str(root / "paper")],
+        "solution_presentation_check": ["--workspace", str(root), "--spec", str(root / outputs[0])],
     }
     for name in step.get("checks", []):
         if name == "human_decision_check":

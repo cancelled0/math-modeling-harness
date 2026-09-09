@@ -3,8 +3,6 @@
   "profile": "submission",
   "extends": "pipeline.template.json",
   "defaults": {
-    "paper_format": "latex",
-    "delivery_mode": "latex_primary_docx_mirror",
     "robustness_required": true,
     "require_result_verdict": true
   }

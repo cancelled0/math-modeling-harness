@@ -19,8 +19,8 @@ description: 统一调度数学建模任务，在讨论、局部分析和正式�
 4. 出现失败先读 [故障手册](references/failure-playbook.md)，按数据、特征、方法、参数、实现或指标归因后再重跑。
 5. 正式方法选择前按 [证据政策](references/evidence-policy.md) 做与风险匹配的有边界扫描。
 
-问题契约由 `problem-framer` 一次完成；决策由运行器的 `record-decision` 保存。已批准的方法族进入 `git-experiment-manager`，代码审查直接按 Python/MATLAB 路由。结果先经 `result-evaluator`，按配置做鲁棒性，再进行一次结果判断；submission 才冻结、写作和最终审计。
+问题契约由 `problem-framer` 一次完成；决策由运行器的 `record-decision` 保存。已批准的方法族进入 `git-experiment-manager`，代码审查直接按 Python/MATLAB 路由。结果先经 `result-evaluator`，按配置做鲁棒性，再按 profile 进行结果判断；所有正式求解最终都由 `modeling-results-presenter` 生成完整求解过程与结果展示。
 
 ## 验证
 
-修改路由或 Skill 集后运行 `scripts/audit_skill_routes.py`；需要回归时运行其 `--smoke`。不要绕过 G2.5、冻结门或四类人工判断。
+修改路由或 Skill 集后运行 `scripts/audit_skill_routes.py`；需要回归时运行其 `--smoke`。不要绕过 G2.5 或三类人工判断。

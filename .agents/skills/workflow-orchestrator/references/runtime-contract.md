@@ -15,12 +15,10 @@
 | code-review | `*_review.json` | status、reviewed_run、checks、evidence_files |
 | run-assessment | `*_run_assessment.json` | `ready_for_robustness` 或 `needs_repair`、归因、风险处理、证据 |
 | result-synthesis | `*_result_evidence.json` | 结果、reference、鲁棒性、限制、证据 |
-| claim_freeze | `frozen_numbers.json` | 声明范围、来源定位和拟冻结 claims；决定另存 JSONL |
-| submission-audit | `paper/audits/submission_audit.json` | 完整性、一致性、哈希、交付和渲染证据 |
-| quality-audit | `paper/qa_report.json` | 最终抽样、证据、未解决项 |
+| solution-presentation | `*_solution_presentation.json/.md` | 模型、推导、算法、结果、诊断、局限和来源定位 |
 
 `reference_policy.role` 可为 `empirical_baseline`、`heuristic`、`historical`、`previous_policy`、`small_instance_oracle`、`analytic_check` 或 `none_with_reason`。只有比较声明要求执行可比 reference 和 comparison contract。
 
 ## 人工决定
 
-仅保留 `framing_choice`、`method_choice`、`result_verdict` 和 `claim_freeze` 四类。检查点集合从 pipeline 各步骤的 `checkpoint` 字段派生，不另设重复清单。决定必须由 `record-decision` 保存真实用户原话、typed choice、当前证据哈希；不在 Skill 间传递隐含批准。
+仅保留 `framing_choice`、`method_choice` 和 `result_verdict` 三类。检查点集合从 pipeline 各步骤的 `checkpoint` 字段派生，不另设重复清单。决定必须由 `record-decision` 保存真实用户原话、typed choice、当前证据哈希；不在 Skill 间传递隐含批准。

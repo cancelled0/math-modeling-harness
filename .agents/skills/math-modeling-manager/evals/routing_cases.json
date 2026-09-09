@@ -31,14 +31,6 @@
     {"id":"assessment","request":"解释一次运行为何失败","expected_primary":"result-evaluator","expected_supporting":["data-auditor-cleaner","feature-engineering"]},
     {"id":"robustness","request":"做敏感性和稳定性检查","expected_primary":"robustness-checker","expected_supporting":["result-evaluator"]},
     {"id":"result-pause","request":"结果需要接受或调整","expected_primary":"workflow-orchestrator","human_pause":true,"pause_reason":"result_accept_adjust_or_fallback"},
-    {"id":"present","request":"展示完整求解过程","expected_primary":"modeling-results-presenter","expected_supporting":["result-evaluator"]},
-    {"id":"freeze-pause","request":"冻结数字和声明范围","expected_primary":"workflow-orchestrator","human_pause":true,"pause_reason":"number_freeze_and_claim_scope"},
-    {"id":"package","request":"整理冻结结果为写作包","expected_primary":"solution-package-builder","expected_supporting":["final-method-explainer"]},
-    {"id":"figures","request":"规划并生成最小论文图表","expected_primary":"figure-table-planner","expected_supporting":["math-figure-generator"]},
-    {"id":"write","request":"依据冻结证据撰写分节","expected_primary":"paper-section-writer","expected_supporting":["paper-polisher"]},
-    {"id":"references","request":"核对论文引用","expected_primary":"reference-manager","expected_supporting":["paper-section-writer"]},
-    {"id":"latex","request":"编译中文 LaTeX 并导出 DOCX","expected_primary":"latex-paper-zh","expected_supporting":["submission-auditor"]},
-    {"id":"audit","request":"做提交完整性和一致性审计","expected_primary":"submission-auditor","expected_supporting":["quality-assurance-auditor"]},
-    {"id":"qa","request":"最终抽样检查","expected_primary":"quality-assurance-auditor","expected_supporting":["submission-auditor"]}
+    {"id":"present","request":"生成正式的完整求解过程与结果展示","expected_primary":"modeling-results-presenter","expected_supporting":["result-evaluator"]}
   ]
 }

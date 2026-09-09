@@ -1,6 +1,6 @@
 ---
 name: scientific-visualization
-description: Provide specialist chart-design or accessibility guidance for difficult scientific figures. Contest figure planning, generation, provenance, and render verification remain owned by math-figure-generator.
+description: Provide specialist chart-design or accessibility guidance for difficult scientific figures used in mathematical-modeling analysis or result presentation.
 license: MIT
 metadata:
   compatibility: Inspect available plotting and rendering tools; example pins are optional reference environments.
@@ -12,8 +12,8 @@ metadata:
 
 # 科学图形专项支持
 
-仅在图形编码、复杂多面板、不确定性、缺失数据、色觉可访问性或期刊导出要求需要专项判断时使用。普通数模图表由 `math-figure-generator` 直接完成，避免两个 Skill 同时维护图表清单和文件状态。
+仅在图形编码、复杂多面板、不确定性、缺失数据或色觉可访问性需要专项判断时使用。
 
-本 Skill 给出具体设计或审计建议，不另建竞争性的图表计划。正式输出仍由 `math-figure-generator` 绑定数据来源、声明和渲染结果。
+本 Skill 给出具体设计或审计建议，不另建竞争性的图表计划。用于正式结果展示的图形由 `modeling-results-presenter` 绑定数据来源和结论范围。
 
 需要配色、出版规范、Matplotlib 示例或现有工具脚本时，读取 [详细指南](references/detailed-guide.md) 和相应参考文件。

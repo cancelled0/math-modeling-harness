@@ -3,30 +3,10 @@
   "profile": "lean",
   "extends": "pipeline.template.json",
   "defaults": {
-    "paper_format": "none",
-    "delivery_mode": "single",
     "robustness_required": false,
-    "require_result_verdict": false,
-    "enable_freeze": false
+    "require_result_verdict": false
   },
   "exclude_steps": [
-    "academic-evidence-scan",
-    "method-explanation",
-    "figure-plan",
-    "figures",
-    "paper-section",
-    "paper-polish",
-    "references",
-    "latex-build",
-    "docx-export",
-    "word-build",
-    "markdown-build",
-    "submission-audit",
-    "quality-audit"
-  ],
-  "step_overrides": {
-    "freeze": {
-      "optional_config": "enable_freeze"
-    }
-  }
+    "academic-evidence-scan"
+  ]
 }

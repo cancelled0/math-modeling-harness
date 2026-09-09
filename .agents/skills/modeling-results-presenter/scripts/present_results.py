@@ -43,7 +43,7 @@ def validate(root, spec):
         if not isinstance(spec.get(key), list) or (not spec[key] and not spec.get("omissions", {}).get(key)):
             raise ValueError(f"{key} 必须为列表；不适用时填写 omissions.{key} 的具体原因")
     if spec.get("status") != "ready_for_review":
-        raise ValueError("展示状态必须为 ready_for_review，不代表人工接受或冻结")
+        raise ValueError("展示状态必须为 ready_for_review，不代表人工接受")
     run = load(resolve(root, spec["run_summary"]))
     if run.get("question_id") != spec["question_id"] or run.get("experiment_id") != spec["experiment_id"]:
         raise ValueError("展示与运行摘要不属于同一问/实验")
@@ -97,7 +97,7 @@ def validate(root, spec):
 
 def render(root, spec):
     validate(root, spec)
-    lines = [f"# {spec['question_id']}：{spec['title']}", "", f"实验：{spec['experiment_id']}；状态：待审阅，尚未接受或冻结。", "", spec["problem_goal"], "", "## 模型假设与准备", ""]
+    lines = [f"# {spec['question_id']}：{spec['title']}", "", f"实验：{spec['experiment_id']}；状态：待审阅，接受状态以结果决策账本为准。", "", spec["problem_goal"], "", "## 模型假设与准备", ""]
     for a in spec["assumptions"]:
         lines.extend([f"**{a['id']}：{a['statement']}**", "", f"依据：{a['basis']}。影响：{a['impact']}。验证：{a['validation']}。", ""])
     if not spec["assumptions"]:
@@ -150,9 +150,9 @@ def main():
             target.write_text(text, encoding="utf-8")
             if args.index:
                 run = load(root / "planning/workflow_run.json")
-                items = ["# 数学建模求解过程与结果展示", "", "以下报告供审阅；接受与冻结状态以决策账本为准。", ""]
+                items = ["# 数学建模求解过程与结果展示", "", "以下报告供审阅；结果接受状态以决策账本为准。", ""]
                 for q, iteration in run["iterations"].items():
-                    report = root / f"results/{q}/experiments/{iteration}/presentation.md"
+                    report = root / f"results/{q}/reports/{q.lower()}_solution_presentation.md"
                     if report.is_file():
                         items.append(f"- [{q} 求解过程](<{report.as_posix()}>)")
                 (root / "results/modeling_results.md").write_text("\n".join(items) + "\n", encoding="utf-8")
