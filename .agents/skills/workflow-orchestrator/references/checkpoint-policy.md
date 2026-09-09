@@ -2,6 +2,8 @@
 
 四类判断都使用 `policy=never_auto_approve`：
 
+四类检查点只在 pipeline 对应步骤中定义；运行器和审计器从步骤派生集合，不维护第二份清单。
+
 1. `framing_choice`：只有会改变题意、输出或声明范围的歧义才触发。
 2. `method_choice`：确认方法契约中的 main 与 reference policy。
 3. `result_verdict`：接受、调整、拒绝或启用 fallback；稳定性判断并入此处。

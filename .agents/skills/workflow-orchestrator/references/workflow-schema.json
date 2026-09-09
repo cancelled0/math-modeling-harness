@@ -1,27 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Math Modeling Workflow Template",
+  "title": "Math Modeling Pipeline or Profile Template",
   "type": "object",
-  "required": ["schema_version", "profile", "human_checkpoints", "steps"],
+  "required": ["schema_version"],
+  "oneOf": [
+    {"required": ["defaults", "steps", "runtime_revision"]},
+    {"required": ["profile", "extends", "defaults"]}
+  ],
   "properties": {
     "schema_version": {"const": 1},
     "profile": {"enum": ["lean", "submission"]},
+    "extends": {"const": "pipeline.template.json"},
+    "exclude_steps": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "step_overrides": {"type": "object"},
+    "runtime_revision": {"type": "integer", "minimum": 1},
     "defaults": {
       "type": "object",
       "properties": {
         "paper_format": {"enum": ["latex", "word", "markdown", "none"]},
         "delivery_mode": {"enum": ["single", "latex_primary_docx_mirror"]}
-      }
-    },
-    "human_checkpoints": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["reason", "policy"],
-        "properties": {
-          "reason": {"type": "string"},
-          "policy": {"const": "never_auto_approve"}
-        }
       }
     },
     "steps": {

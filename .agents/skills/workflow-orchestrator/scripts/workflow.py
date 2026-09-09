@@ -47,10 +47,44 @@ def hash_value(data):
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 def template_path(profile):
+    if profile not in {"submission", "lean"}:
+        raise WorkflowError(f"invalid workflow profile: {profile}")
     return ASSET_DIR / ("cumcm-submission.template.json" if profile == "submission" else "lean.template.json")
 
 def load_template(profile):
-    return read_json(template_path(profile))
+    spec = read_json(template_path(profile))
+    if spec.get("profile") != profile or spec.get("extends") != "pipeline.template.json":
+        raise WorkflowError(f"invalid profile template: {profile}")
+    pipeline = read_json(ASSET_DIR / spec["extends"])
+    if pipeline.get("schema_version") != spec.get("schema_version"):
+        raise WorkflowError(f"template schema mismatch: {profile}")
+    if pipeline.get("runtime_revision") != RUNTIME_REVISION:
+        raise WorkflowError("pipeline template/runtime revision mismatch")
+
+    base_steps = pipeline.get("steps", [])
+    ids = [step.get("id") for step in base_steps]
+    if len(ids) != len(set(ids)) or any(not step_id for step_id in ids):
+        raise WorkflowError("pipeline template contains invalid or duplicate step ids")
+    excluded = set(spec.get("exclude_steps", []))
+    overrides = spec.get("step_overrides", {})
+    unknown = (excluded | set(overrides)) - set(ids)
+    if unknown:
+        raise WorkflowError(f"profile template references unknown steps: {sorted(unknown)}")
+
+    steps = []
+    for raw in base_steps:
+        if raw["id"] in excluded:
+            continue
+        step = copy.deepcopy(raw)
+        step.update(copy.deepcopy(overrides.get(raw["id"], {})))
+        steps.append(step)
+    return {
+        "schema_version": pipeline["schema_version"],
+        "profile": profile,
+        "defaults": {**copy.deepcopy(pipeline.get("defaults", {})), **copy.deepcopy(spec.get("defaults", {}))},
+        "steps": steps,
+        "runtime_revision": pipeline["runtime_revision"],
+    }
 
 def runtime_paths(root):
     return {key: root / "planning" / name for key, name in {
@@ -713,7 +747,9 @@ def step_complete(root, manifest, step):
     return state(root, run, template, manifest)[2].get(f"{manifest['question_id']}:{step['id']}", False)
 
 def resolved_config(root, args, session, template):
-    config = {**template["defaults"], **session}
+    config = copy.deepcopy(template["defaults"])
+    configurable = set(config) | {"random_seed", "deadline_at"}
+    config.update({key: copy.deepcopy(session[key]) for key in configurable if key in session})
     for argument, key in {"contest": "contest_profile", "paper_format": "paper_format", "delivery_mode": "delivery_mode",
         "language": "implementation_language", "seed": "random_seed", "paper_language": "paper_language"}.items():
         value = getattr(args, argument, None)
@@ -743,7 +779,6 @@ def cmd_init(root, args):
         raise WorkflowError("formal workflow requires Git")
     session.update(config, rigor_profile=profile, active_questions=questions)
     session.setdefault("schema_version", 1)
-    session.setdefault("interaction_mode", "speed")
     run = {"schema_version": 1, "runtime_revision": RUNTIME_REVISION, "profile": profile, "questions": questions,
         "workflow_id": getattr(args, "workflow_id", None) or "math-modeling-session", "status": "running",
         "config": config, "session_hash": hash_value(session), "template_snapshot": template,

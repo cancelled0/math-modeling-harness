@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import subprocess
 import tempfile
 import unittest
@@ -25,6 +26,41 @@ def init_git(workspace: Path) -> None:
 
 
 class WorkflowRuntimeTest(unittest.TestCase):
+    def test_profiles_resolve_from_one_pipeline(self) -> None:
+        assets = SCRIPT.parent.parent / "assets"
+        pipeline = json.loads((assets / "pipeline.template.json").read_text(encoding="utf-8"))
+        submission_spec = json.loads((assets / "cumcm-submission.template.json").read_text(encoding="utf-8"))
+        lean_spec = json.loads((assets / "lean.template.json").read_text(encoding="utf-8"))
+        self.assertNotIn("human_checkpoints", pipeline)
+        self.assertNotIn("steps", submission_spec)
+        self.assertNotIn("steps", lean_spec)
+
+        submission = workflow.load_template("submission")
+        lean = workflow.load_template("lean")
+        self.assertEqual(len(submission["steps"]), 29)
+        self.assertEqual(len(lean["steps"]), 16)
+        expected_pauses = {
+            "material_framing_ambiguity", "final_method_choice",
+            "result_accept_adjust_or_fallback", "number_freeze_and_claim_scope",
+        }
+        for template in (submission, lean):
+            reasons = {step["checkpoint"]["reason"] for step in template["steps"] if step.get("checkpoint")}
+            self.assertEqual(reasons, expected_pauses)
+
+    def test_runtime_config_uses_flat_session_fields_only(self) -> None:
+        template = workflow.load_template("submission")
+        session = {
+            "robustness_required": False,
+            "detailed_code_plan": True,
+            "notes": ["metadata"],
+            "execution_policy": {"robustness_required": True},
+        }
+        config = workflow.resolved_config(Path.cwd(), argparse.Namespace(), session, template)
+        self.assertFalse(config["robustness_required"])
+        self.assertTrue(config["detailed_code_plan"])
+        self.assertNotIn("notes", config)
+        self.assertNotIn("execution_policy", config)
+
     def test_template_driven_smoke(self) -> None:
         result = workflow.smoke_test()
         self.assertEqual(result["status"], "PASSED")

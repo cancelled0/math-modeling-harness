@@ -29,6 +29,7 @@ ORCHESTRATOR_REQUIRED = (
     "references/step-contract.md",
     "references/checkpoint-policy.md",
     "references/workflow-schema.json",
+    "assets/pipeline.template.json",
     "assets/cumcm-submission.template.json",
     "assets/lean.template.json",
     "scripts/workflow.py",
@@ -88,6 +89,16 @@ ALLOWED_PAUSES = {
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_workflow_runtime():
+    workflow_path = Path(__file__).resolve().parents[2] / "workflow-orchestrator" / "scripts" / "workflow.py"
+    spec = importlib.util.spec_from_file_location("math_modeling_workflow_runtime", workflow_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("cannot load workflow runtime")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def frontmatter_name(path: Path) -> str | None:
@@ -162,6 +173,14 @@ def audit() -> tuple[list[str], dict]:
     session_template = load_json(manager_dir / "assets" / "session_config.template.json")
     if session_template.get("delivery_mode") != "latex_primary_docx_mirror":
         errors.append("submission session default must use the canonical-LaTeX DOCX mirror mode")
+    if {"execution_policy", "evidence_policy", "version_control"} & set(session_template):
+        errors.append("session config template must use one flat runtime configuration")
+    required_config = {
+        "feature_engineering", "detailed_code_plan", "robustness_required", "require_result_verdict",
+        "evidence_depth", "research_budget_minutes", "paper_reserve_minutes",
+    }
+    if not required_config <= set(session_template):
+        errors.append(f"session config template lacks canonical fields: {sorted(required_config - set(session_template))}")
 
     registry = load_json(registry_path)
     entries = registry.get("skills", [])
@@ -223,11 +242,35 @@ def audit() -> tuple[list[str], dict]:
     errors.extend(check_explicit_skill_refs(skill_root, registry_set))
 
     template_summaries = []
-    for template_name in ("cumcm-submission.template.json", "lean.template.json"):
+    try:
+        workflow_runtime = load_workflow_runtime()
+    except Exception as exc:
+        workflow_runtime = None
+        errors.append(f"cannot load workflow template resolver: {exc}")
+    if workflow_runtime is not None:
+        canonical_config = set(workflow_runtime.load_template("submission")["defaults"]) | {"random_seed", "deadline_at"}
+        session_metadata = {"schema_version", "rigor_profile", "active_questions", "notes"}
+        unused_config = set(session_template) - canonical_config - session_metadata
+        if unused_config:
+            errors.append(f"session config template contains unused fields: {sorted(unused_config)}")
+    pipeline_path = orchestrator_dir / "assets" / "pipeline.template.json"
+    pipeline = load_json(pipeline_path) if pipeline_path.exists() else {}
+    if "human_checkpoints" in pipeline:
+        errors.append("pipeline template duplicates step checkpoint declarations")
+    for template_name, profile in (("cumcm-submission.template.json", "submission"), ("lean.template.json", "lean")):
         path = orchestrator_dir / "assets" / template_name
         if not path.exists():
             continue
-        template = load_json(path)
+        profile_spec = load_json(path)
+        if "steps" in profile_spec or "human_checkpoints" in profile_spec:
+            errors.append(f"profile {template_name} must contain differences only")
+        if workflow_runtime is None:
+            continue
+        try:
+            template = workflow_runtime.load_template(profile)
+        except Exception as exc:
+            errors.append(f"cannot resolve {template_name}: {exc}")
+            continue
         defaults = template.get("defaults", {})
         if defaults.get("delivery_mode") not in {"single", "latex_primary_docx_mirror"}:
             errors.append(f"template {template_name} has invalid default delivery_mode")
@@ -235,7 +278,7 @@ def audit() -> tuple[list[str], dict]:
         step_ids = [step.get("id") for step in steps]
         gate_order = {name: index for index, name in enumerate(("G0", "G1", "G2", "G2.5", "G3", "G4", "G5", "G6"))}
         previous_gate = -1
-        checkpoint_count = 0
+        checkpoint_reasons = []
         if len(step_ids) != len(set(step_ids)):
             errors.append(f"duplicate step ids in {template_name}")
         for step in steps:
@@ -277,24 +320,18 @@ def audit() -> tuple[list[str], dict]:
             previous_gate = max(previous_gate, current_gate)
             checkpoint = step.get("checkpoint")
             if checkpoint:
-                checkpoint_count += 1
+                checkpoint_reasons.append(checkpoint.get("reason"))
                 if checkpoint.get("reason") not in ALLOWED_PAUSES:
                     errors.append(f"template {template_name} has invalid checkpoint reason: {checkpoint.get('reason')}")
                 if checkpoint.get("policy") != "never_auto_approve":
                     errors.append(f"template {template_name} checkpoint can auto-approve: {step.get('id')}")
                 if not checkpoint.get("decision_type"):
                     errors.append(f"template {template_name} checkpoint lacks decision_type: {step.get('id')}")
-        declared = template.get("human_checkpoints", [])
-        declared_reasons = {item.get("reason") for item in declared}
-        if declared_reasons != ALLOWED_PAUSES:
-            errors.append(f"template {template_name} must declare exactly four pause types")
-        if any(item.get("policy") != "never_auto_approve" for item in declared):
-            errors.append(f"template {template_name} contains an auto-approving checkpoint")
-        if checkpoint_count != 4:
-            errors.append(f"template {template_name} must expose exactly four checkpoint definitions, found {checkpoint_count}")
+        if len(checkpoint_reasons) != 4 or set(checkpoint_reasons) != ALLOWED_PAUSES:
+            errors.append(f"template {template_name} must derive exactly the four allowed pause types from steps")
         template_summaries.append({"template": template_name, "steps": len(steps)})
 
-    submission = load_json(orchestrator_dir / "assets" / "cumcm-submission.template.json")
+    submission = workflow_runtime.load_template("submission") if workflow_runtime is not None else {"steps": []}
     submission_steps = {step.get("id"): step for step in submission.get("steps", [])}
     docx_step = submission_steps.get("docx-export")
     if not docx_step or docx_step.get("delivery_modes") != ["latex_primary_docx_mirror"]:
@@ -340,13 +377,7 @@ def audit() -> tuple[list[str], dict]:
 
 
 def run_smoke() -> dict:
-    workflow_path = Path(__file__).resolve().parents[2] / "workflow-orchestrator" / "scripts" / "workflow.py"
-    spec = importlib.util.spec_from_file_location("math_modeling_workflow_runtime", workflow_path)
-    if spec is None or spec.loader is None:
-        raise AssertionError("cannot load workflow runtime")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.smoke_test()
+    return load_workflow_runtime().smoke_test()
 
 
 def main() -> int:

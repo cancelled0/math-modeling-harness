@@ -1,6 +1,6 @@
 # 正式路由
 
-公共模式、证据、人工判断、Git 和交付政策统一见项目 `AGENTS.md`；可执行步骤以 `workflow-orchestrator/assets/*.template.json` 和 `artifact-contracts.json` 为准。
+公共模式、证据、人工判断、Git 和交付政策统一见项目 `AGENTS.md`；完整步骤以 `workflow-orchestrator/assets/pipeline.template.json` 为准，profile 文件只保存差异，产物字段以 `artifact-contracts.json` 为准。
 
 ## 主链
 

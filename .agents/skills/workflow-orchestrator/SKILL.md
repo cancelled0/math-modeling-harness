@@ -12,7 +12,7 @@ init / status / next / context / start / finish / record-decision
 pause / resume / rerun / check / compare / export / reconfigure / migrate / smoke
 ```
 
-模板位于 `assets/lean.template.json` 与 `assets/cumcm-submission.template.json`；所有机器字段以 `assets/artifact-contracts.json` 为准。旧 revision 用 `migrate` 备份并从 `problem-frame` 重新验证。
+完整步骤只定义在 `assets/pipeline.template.json`；`lean.template.json` 与 `cumcm-submission.template.json` 只保存 profile 差异。所有机器字段以 `assets/artifact-contracts.json` 为准。旧 revision 用 `migrate` 备份并从 `problem-frame` 重新验证。
 
 继续任务先运行 `context --question Qx`，读取 `planning/context/Qx_active_context.md` 定位；该索引不能覆盖真实产物、manifest、决策 JSONL 或执行收据。
 

@@ -1,6 +1,6 @@
 # 步骤执行契约
 
-模板中的每一步至少包含：
+`assets/pipeline.template.json` 中的每一步至少包含；profile 文件只允许排除步骤、覆盖字段和设置默认配置：
 
 - `id`：稳定步骤标识；
 - `skill`：负责生成证据的项目 Skill；

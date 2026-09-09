@@ -2,6 +2,8 @@
 
 模板、运行器和生产 Skill 共用 `assets/artifact-contracts.json`。每个 JSON 产物必须具备 `schema_version`、明确 `status`、真实来源路径和契约规定字段；省略项写理由。`workflow.py` 在 `finish` 时按输出索引执行契约检查。
 
+`planning/session_config.json` 使用扁平字段；profile 默认值来自基础 pipeline 与对应 profile 文件，session 只覆盖同名字段。`execution_policy`、`evidence_policy` 和 `version_control` 不再作为第二层配置入口。
+
 ## 关键产物
 
 | 阶段 | 权威产物 | 最小语义 |
@@ -21,4 +23,4 @@
 
 ## 人工决定
 
-仅保留 `framing_choice`、`method_choice`、`result_verdict` 和 `claim_freeze` 四类。决定必须由 `record-decision` 保存真实用户原话、typed choice、当前证据哈希；不在 Skill 间传递隐含批准。
+仅保留 `framing_choice`、`method_choice`、`result_verdict` 和 `claim_freeze` 四类。检查点集合从 pipeline 各步骤的 `checkpoint` 字段派生，不另设重复清单。决定必须由 `record-decision` 保存真实用户原话、typed choice、当前证据哈希；不在 Skill 间传递隐含批准。
